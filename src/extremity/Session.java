@@ -29,7 +29,7 @@ public class Session{
 
                 fail();
             }else{
-                if((--time % 15) == 0)
+                if((--time % 15) == 0 && time > 0)
                     Call.sendMessage(Strings.format("[accent][Extremity][] @ seconds remaining to vote!", time));
 
                 refreshState();
@@ -58,7 +58,7 @@ public class Session{
         }
 
         votes.put(player.uuid(), res);
-        Call.sendMessage(Strings.format("@ [white] voted @ changing the difficulty to @ (@/@)", player.coloredName(), res ? "in favor of" : "against", Extremity.getName(difficulty), votes(), votesRequired()));
+        Call.sendMessage(Strings.format("@ [white] voted @ changing the difficulty to @ (@/@)\nVote using /diffvote (y/n)", player.coloredName(), res ? "in favor of" : "against", Extremity.getName(difficulty), votes(), votesRequired()));
 
         if(refreshState()){
             time += 10;

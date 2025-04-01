@@ -3,7 +3,7 @@ name: "extremity"
 author: "WMF Industries"
 main: "extremity.Extremity"
 description: "Mindustry: Evil Edition"
-version: "0.6"
+version: "0.7"
 minGameVersion: 146
 java: true
 hidden: true

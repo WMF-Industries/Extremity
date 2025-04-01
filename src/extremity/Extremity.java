@@ -47,6 +47,25 @@ public class Extremity extends Mod{
                     player.sendMessage("[accent][Extremity] [scarlet]Invalid parameter, please type yes (y) or no (n) in order to vote!");
                 }
             });
+            netServer.clientCommands.<Player>register("unitdex", "[unitdex]", "Allows admins to edit the unitdex ingame", (args, player) -> {
+                if(!player.admin){
+                    player.sendMessage("[accent][Extremity] [scarlet]Missing necessary privileges!");
+                    return;
+                }
+
+                if(args.length <= 0){
+                    player.sendMessage(Manager.packDex());
+                    return;
+                }
+
+                if(args[0].equals("reset")){
+                    Manager.reload();
+                    player.sendMessage("[accent][Extremity] Reset unitdex to default values!");
+                }else{
+                    Manager.loadRaw(args[0], "dex");
+                    player.sendMessage("[accent][Extremity] Set new unitdex!");
+                }
+            });
         });
     }
 

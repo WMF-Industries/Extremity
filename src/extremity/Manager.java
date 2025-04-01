@@ -182,13 +182,15 @@ public class Manager{
 
         if(host){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
-                if(!hasPlayers(u.team) && difficulty >= 2)
-                    u.apply(StatusEffects.fast, Float.MAX_VALUE);
-                else{
-                    u.apply(StatusEffects.slow, Float.MAX_VALUE);
+                if(difficulty >= 2){
+                    if(!hasPlayers(u.team))
+                        u.apply(StatusEffects.fast, Float.MAX_VALUE);
+                    else{
+                        if(difficulty >= 3) u.apply(StatusEffects.slow, Float.MAX_VALUE);
 
-                    if(u.hasEffect(StatusEffects.wet))
-                        u.apply(StatusEffects.corroded, 3f);
+                        if(u.hasEffect(StatusEffects.wet))
+                            u.apply(StatusEffects.corroded, 3f);
+                    }
                 }
             });
         }
