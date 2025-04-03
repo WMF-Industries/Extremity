@@ -27,6 +27,8 @@ public class Extremity extends Mod{
         });
 
         Events.on(EventType.ServerLoadEvent.class, e ->{
+            StringBuilder dex = new StringBuilder();
+
             netServer.clientCommands.<Player>register("difficulty", "<difficulty>", "Changes the Extremity difficulty level, accepts numbers from 0 to 3, higher being harder", (args, player) -> {
                 if(vote != null && !vote.completed){
                     player.sendMessage("[accent][Extremity] [scarlet]A vote is already in progress, please wait before it finishes!");
@@ -59,12 +61,22 @@ public class Extremity extends Mod{
                 }
 
                 if(args[0].equals("reset")){
+                    dex.setLength(0);
                     Manager.reload();
+
                     player.sendMessage("[accent][Extremity] Reset unitdex to default values!");
-                }else{
-                    Manager.loadRaw(args[0], "dex");
-                    player.sendMessage("[accent][Extremity] Set new unitdex!");
+                    return;
                 }
+
+                if(args[0].equals("submit")){
+                    Manager.loadRaw(dex.toString(), "dex");
+                    dex.setLength(0);
+
+                    player.sendMessage("[accent][Extremity] Submitted new unitdex!");
+                }
+
+                dex.append(args[0]);
+                player.sendMessage("[accent][Extremity] Saved unitdex data in cache\nType [accent]/unitdex submit[] to apply when ready!");
             });
         });
     }

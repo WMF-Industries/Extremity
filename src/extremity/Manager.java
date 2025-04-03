@@ -37,8 +37,8 @@ public class Manager{
     static float heat, req, time;
 
     static void setup(){
-        Timer.schedule(Manager::update, 0, 1f/60); // 60 tps updating of extremity logic
         Timer.schedule(Manager::updateWeathers, 0, 1f/12); // 5 tps updating of the weather state
+        Events.run(EventType.Trigger.update, Manager::update);
 
         // startup task that creates a map of unit spawns, *should* be compatible with most mods
         Events.on(EventType.ContentInitEvent.class, e -> {
@@ -47,26 +47,38 @@ public class Manager{
         });
 
         Core.app.post(() -> {
-            netServer.addPacketHandler("extremity-sync", Manager::syncTask);
-            netServer.addPacketHandler("extremity-confirm", (player, content) -> players.addUnique(player));
+            netServer.addPacketHandler("extremity-resync", (player, content) -> sync(player, content.equals("true")));
+            netServer.addPacketHandler("extremity-confirm", (player, version) ->{
+                players.addUnique(player);
+
+                if(!version.equals(version()))
+                    Call.clientPacketReliable(player.con, "extremity-error", version());
+
+                int ver = Strings.parseInt(version().replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
+                if(ver < comp){
+                    if(headless)
+                        Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", version(), version));
+                    else ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), version(), version));
+                }
+            });
 
             if(headless) return;
 
             netClient.addPacketHandler("extremity-error", ver ->
-                ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-error"), version(), ver))
+                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), version(), ver), 10f)
             );
-            netClient.addPacketHandler("extremity-difficulty", diff -> {
-                String[] vars = diff.split(":");
+            netClient.addPacketHandler("extremity-config", cfg -> {
+                String[] vars = cfg.split(":");
 
-                difficulty = Strings.parseInt(vars[0], -1);
-                if(vars.length > 1)
-                    allowPvp = vars[1].equals("true");
+                difficulty = Strings.parseInt(vars[1], -1);
+                allowPvp = vars[2].equals("true");
 
-                if(difficulty <= -1)
-                    ui.chatfrag.addMessage(Core.bundle.get("extremity-fail"));
-                else{
-                    Call.serverPacketReliable("extremity-confirm", "");
-                    ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-success"), toName()));
+                if(difficulty <= -1){
+                    ui.showInfoFade(Core.bundle.get("extremity-fail"), 10f);
+                    Call.serverPacketReliable("extremity-resync", vars[0]);
+                }else if(vars[0].equals("true")){
+                    ui.showInfoFade(Strings.format(Core.bundle.get("extremity-success"), toName()), 10f);
+                    Call.serverPacketReliable("extremity-confirm", version());
                 }
             });
         });
@@ -105,33 +117,36 @@ public class Manager{
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
-            players.clear();
             units.clear();
             effects.clear();
 
             Arrays.fill(weathers, false);
 
             host = net.server() || !net.active();
-            if(headless){
-                allowPvp = state.rules.pvp;
-                return;
-            }
-
             if(host){
-                allowPvp = (Core.settings.getBool("extremity-pvp", false) && state.rules.pvp);
-                difficulty = Core.settings.getInt("extremity-difficulty", -1);
-                ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-welcome"), toName()));
-            }else{
-                difficulty = -1;
-                Call.serverPacketReliable("extremity-sync", version());
+                if(headless)
+                    allowPvp = state.rules.pvp;
+                else{
+                    allowPvp = (Core.settings.getBool("extremity-pvp", false) && state.rules.pvp);
+                    difficulty = Core.settings.getInt("extremity-difficulty", -1);
+                    ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-welcome"), toName()));
+                }
+
+                players.each(p -> sync(p, false));
             }
         });
 
         Events.on(EventType.PlayerJoin.class, e -> {
             if(host){
+                sync(e.player, true);
                 Timer.schedule(() -> {
                     if(!players.contains(e.player)) // this isn't in a bundle cause of dedicated servers
-                        e.player.sendMessage("[accent]Welcome!\n\nThe host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[]!\n\nWhile you aren't forced to have the mod to join, having it would greatly reduce certain desyncs!\n\nGood luck.");
+                        e.player.sendMessage(
+                            Strings.format(
+                                "[accent]Welcome!\n\nThe host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[]!\nConsider installing the mod greatly reduce certain desyncs!\n\nCurrent difficulty is @!\nGood luck.",
+                                Extremity.getName(difficulty)
+                            )
+                        );
                 }, 3f);
             }
         });
@@ -153,7 +168,7 @@ public class Manager{
 
             units.each(type -> {
                 areas.clear();
-                tile.circle((int)((e.unit.hitSize + 12f) / tilesize), var -> {
+                tile.circle((int)((e.unit.hitSize + 16f) / tilesize), var -> {
                     if(var != null && (!var.solid() || type.flying) && (var.floor().isLiquid || !type.naval))
                         areas.add(var);
                 });
@@ -178,24 +193,27 @@ public class Manager{
     }
 
     private static void update(){
-        if(difficulty < 1) return;
+        if(difficulty < 1 || !state.isPlaying()) return;
 
         if(host){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
+                if(u == null || !u.isValid()) return;
+
                 if(difficulty >= 2){
                     if(!hasPlayers(u.team))
-                        u.apply(StatusEffects.fast, Float.MAX_VALUE);
+                        u.apply(StatusEffects.fast, 300f);
                     else{
-                        if(difficulty >= 3) u.apply(StatusEffects.slow, Float.MAX_VALUE);
+                        if(difficulty >= 3)
+                            u.apply(StatusEffects.slow, 300f);
 
                         if(u.hasEffect(StatusEffects.wet))
-                            u.apply(StatusEffects.corroded, 3f);
+                            u.apply(StatusEffects.corroded, 180f);
                     }
                 }
             });
         }
 
-        if(difficulty >= 3) // bullets deal less damage if they're new >:3
+        if(difficulty >= 3) // bullets deal less damage if they're new
             Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / (b.lifetime / b.time));
 
         if(allowPvp) return;
@@ -216,7 +234,7 @@ public class Manager{
     }
 
     private static void updateWeathers(){
-        if(difficulty < 1) return;
+        if(difficulty < 1 || !state.isPlaying()) return;
 
         Arrays.fill(weathers, false);
         Groups.weather.each(state -> {
@@ -256,19 +274,6 @@ public class Manager{
 
         heat = build.heat;
         return true;
-    }
-
-    private static void syncTask(Player player, String version){
-        Call.clientPacketReliable(player.con, "extremity-difficulty", difficulty + ":" + allowPvp);
-        if(!version.equals(version()))
-            Call.clientPacketReliable(player.con, "extremity-error", version());
-
-        int ver = Strings.parseInt(version().replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
-        if(ver < comp){
-            if(headless)
-                Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", version(), version));
-            else ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), version(), version));
-        }
     }
 
     static void reload(){
@@ -420,5 +425,9 @@ public class Manager{
 
     private static String version(){
         return mods.getMod("extremity").meta.version;
+    }
+
+    private static void sync(Player player, boolean initial){
+        Call.clientPacketReliable(player.con, "extremity-config", Strings.format("@:@:@", initial, difficulty, allowPvp));
     }
 }

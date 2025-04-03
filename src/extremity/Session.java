@@ -14,7 +14,7 @@ public class Session{
 
     public Session(Player player, int difficulty){
         this.difficulty = difficulty;
-        this.vote(player, true);
+        this.vote(player, true, true);
 
         manager = Timer.schedule(() -> {
             if(completed){
@@ -52,6 +52,10 @@ public class Session{
     }
 
     public void vote(Player player, boolean res){
+        vote(player, res, false);
+    }
+
+    public void vote(Player player, boolean res, boolean initial){
         if(votes.containsKey(player.uuid())){
             player.sendMessage("[accent][Extremity] [scarlet]You have already voted!");
             return;
@@ -60,7 +64,7 @@ public class Session{
         votes.put(player.uuid(), res);
         Call.sendMessage(Strings.format("@ [white] voted @ changing the difficulty to @ (@/@)\nVote using /diffvote (y/n)", player.coloredName(), res ? "in favor of" : "against", Extremity.getName(difficulty), votes(), votesRequired()));
 
-        if(refreshState()){
+        if(!initial && refreshState()){
             time += 10;
             Call.sendMessage("[accent][Extremity][] Added 10 seconds to the voting session.");
         }
