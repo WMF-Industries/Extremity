@@ -34,7 +34,7 @@ public class Manager{
     static boolean[] weathers = new boolean[3];
     static Item type;
     static int ammo;
-    static float heat, req, time;
+    static float heat, req, time, damage;
 
     static void setup(){
         Timer.schedule(Manager::updateWeathers, 0, 1f/12); // 5 tps updating of the weather state
@@ -221,15 +221,20 @@ public class Manager{
         world.tiles.eachTile(t -> {
             if(t.build == null || !hasPlayers(t.team())) return;
 
-            if(host && weathers[0] && Mathf.chance(0.64d)) // damage is fully synced so only apply on the host's side
-                t.build.damageContinuous(0.0083f * t.build.block.size * difficulty);
             if(weathers[1]) // the weather slowdowns have to be simulated on both ends - they aren't synced!
                 t.build.applySlowdown(0.35f, 2f);
             if(weathers[2] && t.build.block instanceof Conveyor)
                 t.build.applySlowdown(0.5f, 2f);
 
-            if(host && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
-                t.build.damageContinuous(heat * t.build.block.size * difficulty);
+            if(!host) return;
+
+            damage = 0;
+            if(weathers[0] && Mathf.chance(0.64d))
+                damage += 0.0083f * t.build.block.size * difficulty;
+            if(validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
+                damage += heat * t.build.block.size * difficulty;
+
+            t.build.damageContinuous(damage);
         });
     }
 
