@@ -116,6 +116,8 @@ public class Manager{
             builds.each(b -> b.damage(b.maxHealth / (4f / (difficulty - 1))));
         });
 
+        if(!headless) Events.on(EventType.WorldLoadBeginEvent.class, e -> difficulty = -1);
+
         Events.on(EventType.WorldLoadEvent.class, e -> {
             units.clear();
             effects.clear();
@@ -234,7 +236,7 @@ public class Manager{
             if(validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
                 damage += heat * t.build.block.size * difficulty;
 
-            t.build.damageContinuous(damage);
+            if(damage > 0) t.build.damageContinuous(damage);
         });
     }
 
