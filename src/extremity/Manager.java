@@ -232,9 +232,9 @@ public class Manager{
 
             damage = 0;
             if(weathers[0] && Mathf.chance(0.64d))
-                damage += 0.0083f * t.build.block.size * difficulty;
+                damage += 0.0083f * difficulty;
             if(validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
-                damage += heat * t.build.block.size * difficulty;
+                damage += heat * difficulty;
 
             if(damage > 0) t.build.damageContinuous(damage);
         });
