@@ -6,6 +6,7 @@ import arc.util.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.mod.*;
+import extremity.utils.*;
 
 import static mindustry.Vars.*;
 
@@ -18,10 +19,30 @@ public class Extremity extends Mod{
         Events.on(EventType.ClientLoadEvent.class, e -> {
             UnitdexEditor.init();
 
+            if(!Core.settings.getBool("extremity-init", false)){
+                ui.showStartupInfo("@extremity-info");
+                Core.settings.put("extremity-init", true);
+            }
+
             ui.settings.addCategory(Core.bundle.get("extremity-category"), Icon.book, t ->{
-                t.sliderPref("extremity-difficulty", 0, 0, 3, 1, s -> Core.bundle.get("extremity-diff" + s));
-                t.checkPref("extremity-pvp", false);
-                t.sliderPref("extremity-rows", 1, 1, 3, 1, s -> s + "");
+                DynamicSettings.DynamicTable table = new DynamicSettings.DynamicTable();
+                table.addDefaults = () -> !Core.settings.getBool("extremity-beyond", false);
+
+                table.sliderPref("extremity-difficulty", 0, 0, 3, s -> Core.bundle.get("extremity-diff" + s), () -> !Core.settings.getBool("extremity-beyond"));
+                table.sliderPref("extremity-difficulty", 4, 4, 7, s -> Core.bundle.get("extremity-diff" + s), () -> Core.settings.getBool("extremity-beyond"));
+                table.confirmPref("extremity-beyond", false, c ->
+                    ui.showConfirm("@confirm", "@setting.extremity-beyond.confirm", () -> table.rebuild("extremity-beyond", true)
+                ), () -> !Core.settings.getBool("extremity-beyond"));
+                table.checkPref("extremity-pvp", false, null, null);
+                table.sliderPref("extremity-rows", 1, 1, 3, 1, s -> s + "", null);
+
+                t.add(table);
+
+                Events.on(Manager.ExtremityLoseEvent.class, ev -> {
+                    // make sure it sets the difficulty to default
+                    Core.settings.put("extremity-beyond", false);
+                    table.rebuild("extremity-difficulty", 0);
+                });
             });
             ui.menufrag.addButton("@extremity-unitdex-button", Icon.pencil, UnitdexEditor::show);
         });

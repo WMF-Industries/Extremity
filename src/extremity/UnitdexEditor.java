@@ -254,7 +254,7 @@ public class UnitdexEditor{
                 if(Manager.spawns.containsKey(item)) continue;
 
                 StringBuilder tip = new StringBuilder(item.localizedName);
-                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName()).append(")");
+                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName).append(")");
 
                 t.button(new TextureRegionDrawable(item.uiIcon), Styles.flati, iconLarge, () -> {
                     Manager.spawns.put(item, new Seq<>());
@@ -282,7 +282,7 @@ public class UnitdexEditor{
                 if(!advanced && (!item.unlockedNow() || item.isHidden() || !item.logicControllable)) continue;
 
                 StringBuilder tip = new StringBuilder(item.localizedName);
-                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName()).append(")");
+                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName).append(")");
 
                 t.button(new TextureRegionDrawable(item.uiIcon), Styles.flati, iconLarge, () -> {
                     Seq<UnitType> res = Manager.spawns.get(entry);
@@ -314,7 +314,7 @@ public class UnitdexEditor{
                 if(!advanced && (!item.unlockedNow() || item.isHidden() || !item.logicControllable)) continue;
 
                 StringBuilder tip = new StringBuilder(item.localizedName);
-                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName()).append(")");
+                if(item.isModded()) tip.append("\n(").append(item.minfo.mod.meta.displayName).append(")");
 
                 t.button(new TextureRegionDrawable(item.uiIcon), Styles.flati, iconLarge, () -> {
                     Seq<UnitType> res = Manager.spawns.get(entry);

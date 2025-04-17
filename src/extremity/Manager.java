@@ -2,25 +2,32 @@ package extremity;
 
 import arc.*;
 import arc.math.*;
+import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
 import mindustry.content.*;
+import mindustry.ctype.*;
 import mindustry.entities.*;
 import mindustry.entities.bullet.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.type.*;
 import mindustry.world.*;
+import mindustry.world.blocks.defense.*;
 import mindustry.world.blocks.defense.turrets.*;
 import mindustry.world.blocks.distribution.*;
+import mindustry.world.blocks.storage.*;
 import mindustry.world.blocks.units.*;
 import mindustry.world.consumers.*;
 
+import java.nio.*;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
 
 public class Manager{
+    public static class ExtremityLoseEvent{};
+
     static boolean host = false, allowPvp = false;
     static int difficulty = 3; // highest by default
 
@@ -31,7 +38,9 @@ public class Manager{
     private final static Seq<Player> players = new Seq<>();
     private final static ObjectFloatMap<StatusEffect> effects = new ObjectFloatMap<>();
 
+    static boolean[] covered;
     static boolean[] weathers = new boolean[3];
+    static boolean kill = false;
     static Item type;
     static int ammo;
     static float heat, req, time, damage;
@@ -47,7 +56,7 @@ public class Manager{
         });
 
         Core.app.post(() -> {
-            netServer.addPacketHandler("extremity-resync", (player, content) -> sync(player, content.equals("true")));
+            netServer.addBinaryPacketHandler("extremity-resync", (player, content) -> sync(player, content[0] >= 1));
             netServer.addPacketHandler("extremity-confirm", (player, version) ->{
                 players.addUnique(player);
 
@@ -67,16 +76,26 @@ public class Manager{
             netClient.addPacketHandler("extremity-error", ver ->
                 ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), version(), ver), 10f)
             );
-            netClient.addPacketHandler("extremity-config", cfg -> {
-                String[] vars = cfg.split(":");
+            netClient.addBinaryPacketHandler("extremity-config", cfg -> {
+                ByteBuffer data = ByteBuffer.wrap(cfg);
+                int packed = data.get();
+                boolean initial = false;
 
-                difficulty = Strings.parseInt(vars[1], -1);
-                allowPvp = vars[2].equals("true");
+                switch(packed){
+                    case 1: initial = true;
+                    case 2: allowPvp = true;
+                    case 3: {
+                        initial = true;
+                        allowPvp = true;
+                    }
+                }
+
+                difficulty = data.get();
 
                 if(difficulty <= -1){
                     ui.showInfoFade(Core.bundle.get("extremity-fail"), 10f);
-                    Call.serverPacketReliable("extremity-resync", vars[0]);
-                }else if(vars[0].equals("true")){
+                    Call.serverBinaryPacketReliable("extremity-resync", ByteBuffer.allocate(1).put((byte) (initial ? 1 : 0)).array());
+                }else if(initial){
                     ui.showInfoFade(Strings.format(Core.bundle.get("extremity-success"), toName()), 10f);
                     Call.serverPacketReliable("extremity-confirm", version());
                 }
@@ -100,7 +119,11 @@ public class Manager{
                 }else rng = block.size + (((exp / 3) + (flb / 5)) / 2);
 
                 Damage.dynamicExplosion(e.tile.getX(), e.tile.getY(), exp, flb, pwr, rng, host);
+                return;
             }
+
+            if(difficulty >= 5 && e.tile.block() instanceof CoreBlock)
+                kill = true;
         });
 
         Events.on(EventType.WaveEvent.class, e -> {
@@ -122,7 +145,10 @@ public class Manager{
             units.clear();
             effects.clear();
 
+            kill = false;
+
             Arrays.fill(weathers, false);
+            covered = new boolean[world.width() * world.height()];
 
             host = net.server() || !net.active();
             if(host){
@@ -178,8 +204,8 @@ public class Manager{
                 if(areas.isEmpty()) // no spawn locations, bail!
                     return;
 
-                int rand = Mathf.random(difficulty);
-                for(int i = 0; i <= (difficulty + rand); i++){
+                int rand = unitRand();
+                for(int i = 0; i <= rand; i++){
                     Tile tmp = areas.random();
 
                     Unit u = type.spawn(e.unit.team, tmp.getX() + Mathf.random(-0.2f, 0.2f), tmp.getY() + Mathf.random(-0.2f, 0.2f));
@@ -187,6 +213,41 @@ public class Manager{
                     effects.each(entry -> u.apply(entry.key, entry.value));
                 }
             });
+
+            if(difficulty >= 3 && e.unit.hasEffect(StatusEffects.boss))
+                Units.nearby(e.unit.team, e.unit.x, e.unit.y, e.unit.range(), u -> u.apply(StatusEffects.shielded, Float.MAX_VALUE));
+        });
+
+        Events.on(EventType.SectorLoseEvent.class, e -> {
+            if(difficulty > 3)
+                restartCampaign(state.getPlanet());
+        });
+
+        Events.on(EventType.GameOverEvent.class, e -> {
+            if(!headless && difficulty > 3){
+                Events.fire(new ExtremityLoseEvent());
+
+                if(state.isCampaign())
+                    restartCampaign(state.getPlanet());
+            }
+        });
+    }
+
+    private static void restartCampaign(Planet planet){
+        if(difficulty <= 3 || planet == null) return;
+
+        for(var sec : planet.sectors){
+            sec.clearInfo();
+            if(sec.save != null){
+                sec.save.delete();
+                sec.save = null;
+            }
+        }
+
+        planet.techNodes.each(TechTree.TechNode::reset);
+        content.each(c -> {
+            if(c instanceof UnlockableContent u && u.isOnPlanet(planet))
+                u.clearUnlock();
         });
     }
 
@@ -195,7 +256,7 @@ public class Manager{
     }
 
     private static void update(){
-        if(difficulty < 1 || !state.isPlaying()) return;
+        if(difficulty < 1 || state.isEditor() || !state.isPlaying()) return;
 
         if(host){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
@@ -208,7 +269,7 @@ public class Manager{
                         if(difficulty >= 3)
                             u.apply(StatusEffects.slow, 300f);
 
-                        if(u.hasEffect(StatusEffects.wet))
+                        if(validUnit(u))
                             u.apply(StatusEffects.corroded, 180f);
                     }
                 }
@@ -220,8 +281,22 @@ public class Manager{
 
         if(allowPvp) return;
 
+        if(difficulty <= 3){
+            Groups.build.each(b -> {
+                if(b instanceof ForceProjector.ForceBuild build){
+                    b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
+                        if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
+                            covered[tx + ty * world.width()] = true;
+                    });
+                }
+            });
+        }
+
         world.tiles.eachTile(t -> {
             if(t.build == null || !hasPlayers(t.team())) return;
+
+            if(kill && t.build instanceof CoreBlock.CoreBuild core)
+                core.kill();
 
             if(weathers[1]) // the weather slowdowns have to be simulated on both ends - they aren't synced!
                 t.build.applySlowdown(0.35f, 2f);
@@ -231,12 +306,14 @@ public class Manager{
             if(!host) return;
 
             damage = 0;
-            if(weathers[0] && Mathf.chance(0.64d))
-                damage += 0.0083f * difficulty;
+            if(weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
+                damage += 0.0083f * scaledRand();
             if(validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
-                damage += heat * difficulty;
+                damage += heat * scaledRand();
 
-            if(damage > 0) t.build.damageContinuous(damage);
+            if(damage > 0)
+                t.build.damageContinuous(damage);
+            covered[t.array()] = false;
         });
     }
 
@@ -281,6 +358,18 @@ public class Manager{
 
         heat = build.heat;
         return true;
+    }
+
+    private static boolean validUnit(Unit u){
+        return !state.rules.pvp && u != null && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && (!covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
+    }
+
+    private static int unitRand(){
+        return difficulty <= 3 ? difficulty + Mathf.random(difficulty) : scaledRand() * Mathf.random(1, difficulty / 2);
+    }
+
+    private static int scaledRand(){
+        return difficulty <= 3 ? difficulty : difficulty + Mathf.random(difficulty);
     }
 
     static void reload(){
@@ -435,6 +524,7 @@ public class Manager{
     }
 
     private static void sync(Player player, boolean initial){
-        Call.clientPacketReliable(player.con, "extremity-config", Strings.format("@:@:@", initial, difficulty, allowPvp));
+        byte packed = (byte) ((initial ? 1 : 0) + (allowPvp ? 2 : 0));
+        Call.clientBinaryPacketReliable(player.con, "extremity-config", ByteBuffer.allocate(2).put(packed).put((byte) difficulty).array());
     }
 }
