@@ -35,8 +35,10 @@ public class Manager{
 
     private static Seq<UnitType> units = new Seq<>();
     private final static Seq<Tile> areas = new Seq<>();
-    private final static Seq<Player> players = new Seq<>();
+    private static Seq<StatusEffect> effectCache = new Seq<>();
     private final static ObjectFloatMap<StatusEffect> effects = new ObjectFloatMap<>();
+
+    final static Seq<Player> players = new Seq<>();
 
     static boolean[] covered;
     static boolean[] weathers = new boolean[3];
@@ -52,6 +54,8 @@ public class Manager{
         // startup task that creates a map of unit spawns, *should* be compatible with most mods
         Events.on(EventType.ContentInitEvent.class, e -> {
             reload();
+
+            effectCache = content.statusEffects();
             Log.infoTag("Extremity","Pain has been fully loaded...");
         });
 
@@ -171,7 +175,7 @@ public class Manager{
                     if(!players.contains(e.player)) // this isn't in a bundle cause of dedicated servers
                         e.player.sendMessage(
                             Strings.format(
-                                "[accent]Welcome!\n\nThe host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[]!\nConsider installing the mod greatly reduce certain desyncs!\n\nCurrent difficulty is @!\nGood luck.",
+                                "[accent]Welcome!\n\nThe host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[]!\nConsider installing the mod to greatly reduce certain desyncs!\n\nCurrent difficulty is @!\nView the mod's tutorial using /extremity\nGood luck.",
                                 Extremity.getName(difficulty)
                             )
                         );
@@ -189,10 +193,10 @@ public class Manager{
             units = spawns.get(e.unit.type, Seq.with());
             if(units.isEmpty()) return;
 
-            effects.clear(); // this isn't particularly efficient, but it works!
-            for(StatusEffect eff : content.statusEffects())
-                if(e.unit.hasEffect(eff))
-                    effects.put(eff, e.unit.getDuration(eff));
+            effects.clear();
+            for(int i = 0; i < effectCache.size; i++)
+                if(e.unit.hasEffect(effectCache.get(i)))
+                    effects.put(effectCache.get(i), e.unit.getDuration(effectCache.get(i)));
 
             units.each(type -> {
                 areas.clear();
@@ -204,8 +208,7 @@ public class Manager{
                 if(areas.isEmpty()) // no spawn locations, bail!
                     return;
 
-                int rand = unitRand();
-                for(int i = 0; i <= rand; i++){
+                for(int i = 0; i <= unitRand(); i++){
                     Tile tmp = areas.random();
 
                     Unit u = type.spawn(e.unit.team, tmp.getX() + Mathf.random(-0.2f, 0.2f), tmp.getY() + Mathf.random(-0.2f, 0.2f));
@@ -258,25 +261,23 @@ public class Manager{
     private static void update(){
         if(difficulty < 1 || state.isEditor() || !state.isPlaying()) return;
 
-        if(host){ // only the host has to apply effects, they're synced
+        if(host && difficulty >= 2){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
                 if(u == null || !u.isValid()) return;
 
-                if(difficulty >= 2){
-                    if(!hasPlayers(u.team))
-                        u.apply(StatusEffects.fast, 300f);
-                    else{
-                        if(difficulty >= 3)
-                            u.apply(StatusEffects.slow, 300f);
+                if(!hasPlayers(u.team))
+                    u.apply(StatusEffects.fast, 300f);
+                else{
+                    if(difficulty >= 3)
+                        u.apply(StatusEffects.slow, 300f);
 
-                        if(validUnit(u))
-                            u.apply(StatusEffects.corroded, 180f);
-                    }
+                    if(validUnit(u))
+                        u.apply(StatusEffects.corroded, 180f);
                 }
             });
         }
 
-        if(difficulty >= 3) // bullets deal less damage if they're new
+        if(difficulty >= 4) // bullets deal less damage if they're new
             Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / (b.lifetime / b.time));
 
         if(allowPvp) return;
@@ -336,7 +337,7 @@ public class Manager{
     }
 
     private static boolean validTurret(Building b){ //TODO: this is terrible... replace with something better eventually
-        if(b == null || !b.block.hasLiquids)
+        if(difficulty < 2 || b == null || !b.block.hasLiquids)
             return false;
 
         if(!(b instanceof Turret.TurretBuild build))
@@ -504,7 +505,7 @@ public class Manager{
                 for(String var : secondary){
                     UnitType spawn = getUnit(var);
                     if(spawn != null)
-                        results.addUnique(spawn);
+                        results.add(spawn);
                     else Log.infoTag("Extremity", Strings.format("Couldn't find any unit for entry @", var));
                 }
 

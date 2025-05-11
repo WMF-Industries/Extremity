@@ -8,11 +8,14 @@ import mindustry.gen.*;
 public class Session{
     ObjectMap<String, Boolean> votes = new ObjectMap<>();
     Timer.Task manager;
+    Player player;
 
     int difficulty, time = 30;
     boolean completed = false;
 
     public Session(Player player, int difficulty){
+        this.player = player;
+
         this.difficulty = difficulty;
         this.vote(player, true, true);
 
