@@ -61,7 +61,10 @@ public class Extremity extends Mod{
             StringBuilder dex = new StringBuilder();
             addCommands();
 
-            netServer.clientCommands.<Player>register("difficulty", "<difficulty>", "Changes the Extremity difficulty level, accepts numbers from 0 to 3, higher being harder", (args, player) -> {
+            netServer.clientCommands.<Player>register("difficulty", "[difficulty]", "Changes the Extremity difficulty level (0-3), or prints the current difficulty to chat", (args, player) -> {
+                if(args.length < 1)
+                    player.sendMessage(Strings.format("[accent][Extremity] Current difficulty level is @ ([orange]@[])", getName(Manager.difficulty), Manager.difficulty));
+
                 if(vote != null && !vote.completed){
                     player.sendMessage("[accent][Extremity] [scarlet]A vote is already in progress, please wait before it finishes!");
                     return;

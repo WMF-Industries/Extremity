@@ -26,6 +26,7 @@ import java.util.Arrays;
 import static mindustry.Vars.*;
 
 public class Manager{
+    public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
     public static class ExtremityLoseEvent{};
 
     static boolean host = false, allowPvp = false;
@@ -44,11 +45,10 @@ public class Manager{
     static boolean[] weathers = new boolean[3];
     static boolean kill = false;
     static Item type;
-    static int ammo;
+    static int ammo, schedule;
     static float heat, req, time, damage;
 
     static void setup(){
-        Timer.schedule(Manager::updateWeathers, 0, 1f/12); // 5 tps updating of the weather state
         Events.run(EventType.Trigger.update, Manager::update);
 
         // startup task that creates a map of unit spawns, *should* be compatible with most mods
@@ -261,6 +261,9 @@ public class Manager{
     private static void update(){
         if(difficulty < 1 || state.isEditor() || !state.isPlaying()) return;
 
+        if(++schedule >= fixedRate)
+            fixedUpdate();
+
         if(host && difficulty >= 2){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
                 if(u == null || !u.isValid()) return;
@@ -318,8 +321,38 @@ public class Manager{
         });
     }
 
-    private static void updateWeathers(){
-        if(difficulty < 1 || !state.isPlaying()) return;
+    private static void fixedUpdate(){
+        schedule = 0;
+
+        if(difficulty >= 3 && state.isCampaign()){
+            Planet planet = state.getPlanet();
+            if(planet != null){
+                Seq<Sector> sectors = state.getPlanet().sectors;
+                if(!sectors.isEmpty()){
+                    float ratio = (float) sectors.count(Sector::isCaptured) / sectors.count(Sector::isAttacked), max = difficulty * 0.078f;
+                    if(ratio < max && Mathf.chance(Math.max(0.0005f, (max - ratio) * 0.3f))){
+                        Sector sector = sectors.random();
+                        int waveMax = Math.max(sector.info.winWave, sector.isBeingPlayed() ? state.wave : sector.info.wave + sector.info.wavesPassed) + Mathf.random(1, difficulty) * 5;
+
+                        if(sector.isBeingPlayed()){
+                            state.rules.winWave = waveMax;
+                            state.rules.waves = true;
+                            state.rules.attackMode = false;
+                            planet.campaignRules.apply(planet, state.rules);
+
+                            if(net.server()) Call.setRules(state.rules);
+                        }else{
+                            sector.info.winWave = waveMax;
+                            sector.info.waves = true;
+                            sector.info.attack = false;
+                            sector.saveInfo();
+                        }
+
+                        Events.fire(new EventType.SectorInvasionEvent(sector));
+                    }
+                }
+            }
+        }
 
         Arrays.fill(weathers, false);
         Groups.weather.each(state -> {

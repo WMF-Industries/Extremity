@@ -2,12 +2,11 @@ package extremity.utils;
 
 import arc.*;
 import arc.struct.*;
-import mindustry.*;
 import mindustry.game.*;
 import mindustry.gen.*;
 import mindustry.ui.*;
 
-import static mindustry.Vars.ui;
+import static mindustry.Vars.*;
 
 public class Tutorial{
     public static Seq<Content> localTutorial = new Seq<>(), tutorial = new Seq<>();
@@ -26,13 +25,17 @@ public class Tutorial{
     }
 
     public static void setupServer(){
-        Events.on(EventType.PlayerLeave.class, e -> pointer.remove(e.player));
+        Events.on(EventType.WorldLoadEvent.class, e -> pointer.clear());
+        Events.on(EventType.PlayerLeave.class, e -> {
+            if(!net.client() && e.player != null)
+                pointer.remove(e.player);
+        });
 
         tutorial.addAll(
             new Content("Welcome!", "[accent]Welcome to Extremity's Tutorial[]\nWe'll shortly cover all the things added by Extremity on every level of difficulty\n\nIf a difficulty level has no tutorial entries, it doesn't add any new mechanics, only scales them up!"),
             new Content("[yellow]Mediocrity[]", "Being the lowest difficulty level, [yellow]Mediocrity[] introduces quite a few new mechanics\n\nDying enemy units spawn other units according to the provided unitdex\nWeathers affect buildings:\nSandstorms slow down conveyors\nSnow slows down every building\nRain damages buildings over time unless they're under \uF898Force Projectors"),
             new Content("[orange]Fatality[]", "[orange]Fatality[] raises the bar by scaling up the previous mechanics & adding a few new ones\n\nEnemy units now get the \uF678Fast status effect\nAlly units get \uF7A6Corroded if \uF7B2Wet\nTurrets require coolant to operate, without it, they will explode after a few shots\nBuildings near the drop zone get damaged each wave"),
-            new Content("[scarlet]True Extremity[]", "As the hardest fair difficulty level, [scarlet]True Extremity[] brings a real challenge\n\nAlly units \uF7B3Slow down\nEnemy \uF7A9Guradians give \uF7AAShielded to all nearby enemies upon death"),
+            new Content("[scarlet]True Extremity[]", "As the hardest fair difficulty level, [scarlet]True Extremity[] brings a real challenge\n\nAlly units \uF7B3Slow down\nEnemy \uF7A9Guradians give \uF7AAShielded to all nearby enemies upon death\nThe enemy can attack random captured sectors, even ones without a base nearby"),
             new Content("[#c40004]High Mediocrity[] [scarlet](Beyond Mode)[]", "Entering [scarlet]Beyond Mode[], [#c40004]High Mediocrity[] brings victory chances quite low\n\nAlly bullets have lifetime damage scaling, making them weak at first\n\uF898Force Projectors no longer protect against rain\n[scarlet]Upon losing a sector, the entire campaign of the current planet gets reset"),
             new Content("[#cf0078]Prime Fatality[] [scarlet](Beyond Mode)[]", "[#cf0078]Prime Fatality[] introduces the final, most cruel mechanic\n\nLosing a single core causes every other core to explode"),
             new Content("The End", "[accent]Congrats![]\nYou've reached the end of the tutorial, well done!\nHope this brief content introduction was clear enough\n\n[lightgray]Remember that the mod allows you to customize certain factors, such as the unitdexes![]\n\nEnjoy the mod!")
