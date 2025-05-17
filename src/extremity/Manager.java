@@ -23,13 +23,14 @@ import mindustry.world.consumers.*;
 import java.nio.*;
 import java.util.Arrays;
 
+import static arc.Core.settings;
 import static mindustry.Vars.*;
 
 public class Manager{
     public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
     public static class ExtremityLoseEvent{};
 
-    static boolean host = false, allowPvp = false;
+    static boolean host = false, allowPvp = false, resetCampaign = false;
     static int difficulty = 3; // highest by default
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
@@ -39,6 +40,7 @@ public class Manager{
     private static Seq<StatusEffect> effectCache = new Seq<>();
     private final static ObjectFloatMap<StatusEffect> effects = new ObjectFloatMap<>();
 
+    final static Interval intervals = new Interval(1);
     final static Seq<Player> players = new Seq<>();
 
     static boolean[] covered;
@@ -82,10 +84,9 @@ public class Manager{
             );
             netClient.addBinaryPacketHandler("extremity-config", cfg -> {
                 ByteBuffer data = ByteBuffer.wrap(cfg);
-                int packed = data.get();
                 boolean initial = false;
 
-                switch(packed){
+                switch(data.get()){
                     case 1: initial = true;
                     case 2: allowPvp = true;
                     case 3: {
@@ -95,7 +96,6 @@ public class Manager{
                 }
 
                 difficulty = data.get();
-
                 if(difficulty <= -1){
                     ui.showInfoFade(Core.bundle.get("extremity-fail"), 10f);
                     Call.serverBinaryPacketReliable("extremity-resync", ByteBuffer.allocate(1).put((byte) (initial ? 1 : 0)).array());
@@ -161,10 +161,11 @@ public class Manager{
                 else{
                     allowPvp = (Core.settings.getBool("extremity-pvp", false) && state.rules.pvp);
                     difficulty = Core.settings.getInt("extremity-difficulty", -1);
+                    resetCampaign = difficulty > 3 || Core.settings.getBool("extremity-one-life", false);
                     ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-welcome"), toName()));
                 }
 
-                players.each(p -> sync(p, false));
+                players.each(Manager::sync);
             }
         });
 
@@ -222,13 +223,14 @@ public class Manager{
         });
 
         Events.on(EventType.SectorLoseEvent.class, e -> {
-            if(difficulty > 3)
+            if(resetCampaign)
                 restartCampaign(state.getPlanet());
         });
 
         Events.on(EventType.GameOverEvent.class, e -> {
-            if(!headless && difficulty > 3){
-                Events.fire(new ExtremityLoseEvent());
+            if(resetCampaign){
+                if(difficulty > 3)
+                    Events.fire(new ExtremityLoseEvent());
 
                 if(state.isCampaign())
                     restartCampaign(state.getPlanet());
@@ -237,8 +239,16 @@ public class Manager{
     }
 
     private static void restartCampaign(Planet planet){
-        if(difficulty <= 3 || planet == null) return;
+        if(!resetCampaign || planet == null) return;
 
+        Call.infoToast("Campaign Lost...", 5f);
+
+        // finishes current sector
+        Sector ref = state.rules.sector;
+        if(ref != null && ref.isBeingPlayed())
+            state.rules.defaultTeam.cores().each(Building::kill);
+
+        // clears all other sectors
         for(var sec : planet.sectors){
             sec.clearInfo();
             if(sec.save != null){
@@ -247,11 +257,17 @@ public class Manager{
             }
         }
 
-        planet.techNodes.each(TechTree.TechNode::reset);
-        content.each(c -> {
+        // clears launch cache
+        universe.clearLoadoutInfo();
+
+        // clears the tech tree
+        for(var node : planet.techNodes)
+            node.reset();
+        content.each(c ->{
             if(c instanceof UnlockableContent u && u.isOnPlanet(planet))
                 u.clearUnlock();
         });
+        Core.settings.remove("unlocks");
     }
 
     private static UnitType getUnit(String input){
@@ -329,26 +345,29 @@ public class Manager{
             if(planet != null){
                 Seq<Sector> sectors = state.getPlanet().sectors;
                 if(!sectors.isEmpty()){
-                    float ratio = (float) sectors.count(Sector::isCaptured) / sectors.count(Sector::isAttacked), max = difficulty * 0.078f;
-                    if(ratio < max && Mathf.chance(Math.max(0.0005f, (max - ratio) * 0.3f))){
-                        Sector sector = sectors.random();
-                        int waveMax = Math.max(sector.info.winWave, sector.isBeingPlayed() ? state.wave : sector.info.wave + sector.info.wavesPassed) + Mathf.random(1, difficulty) * 5;
+                    int captured = sectors.count(Sector::isCaptured);
+                    if(captured > Math.max(2, 8 / difficulty)){
+                        float ratio = (float) captured / sectors.count(Sector::isAttacked), max = difficulty * 0.078f;
+                        if(ratio < max && canInvade()){
+                            Sector sector = sectors.select(Sector::isCaptured).random();
+                            int waveMax = Math.max(sector.info.winWave, sector.isBeingPlayed() ? state.wave : sector.info.wave + sector.info.wavesPassed) + Mathf.random(1, difficulty) * 5;
 
-                        if(sector.isBeingPlayed()){
-                            state.rules.winWave = waveMax;
-                            state.rules.waves = true;
-                            state.rules.attackMode = false;
-                            planet.campaignRules.apply(planet, state.rules);
+                            if(sector.isBeingPlayed()){
+                                state.rules.winWave = waveMax;
+                                state.rules.waves = true;
+                                state.rules.attackMode = false;
+                                planet.campaignRules.apply(planet, state.rules);
 
-                            if(net.server()) Call.setRules(state.rules);
-                        }else{
-                            sector.info.winWave = waveMax;
-                            sector.info.waves = true;
-                            sector.info.attack = false;
-                            sector.saveInfo();
+                                if(net.server()) Call.setRules(state.rules);
+                            }else{
+                                sector.info.winWave = waveMax;
+                                sector.info.waves = true;
+                                sector.info.attack = false;
+                                sector.saveInfo();
+                            }
+
+                            Events.fire(new EventType.SectorInvasionEvent(sector));
                         }
-
-                        Events.fire(new EventType.SectorInvasionEvent(sector));
                     }
                 }
             }
@@ -363,6 +382,31 @@ public class Manager{
             else if(state.weather == Weathers.sandstorm)
                 weathers[2] = true;
         });
+    }
+
+    private static boolean canInvade(){
+        float chance , period;
+
+        switch(difficulty){
+            case 3: {
+                chance = 0.000043f;
+                period = 14400f;
+            }
+            case 4: {
+                chance = 0.00005f;
+                period = 7200f;
+            }
+            case 5: {
+                chance = 0.00013f;
+                period = 5400f;
+            }
+            default: {
+                chance = 0.0002f;
+                period = 1800f;
+            }
+        }
+
+        return Mathf.chance(chance) && intervals.get(period);
     }
 
     private static boolean hasPlayers(Team team){
@@ -555,6 +599,10 @@ public class Manager{
 
     private static String version(){
         return mods.getMod("extremity").meta.version;
+    }
+
+    private static void sync(Player player){
+        sync(player, false);
     }
 
     private static void sync(Player player, boolean initial){

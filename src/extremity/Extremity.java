@@ -34,6 +34,11 @@ public class Extremity extends Mod{
                 table.confirmPref("extremity-beyond", false, c ->
                     ui.showConfirm("@confirm", "@setting.extremity-beyond.confirm", () -> table.rebuild("extremity-beyond", true)
                 ), () -> !Core.settings.getBool("extremity-beyond"));
+                table.confirmPref("extremity-one-life", false, c -> {
+                    if(Core.settings.getBool("extremity-one-life", false))
+                        table.rebuild("extremity-one-life", false);
+                    else ui.showConfirm("@confirm", "@setting.extremity-one-life.confirm", () -> table.rebuild("extremity-one-life", true));
+                }, () -> !Core.settings.getBool("extremity-beyond"));
                 table.checkPref("extremity-pvp", false, null, null);
                 table.sliderPref("extremity-rows", 1, 1, 3, 1, s -> s + "", null);
 
@@ -62,8 +67,10 @@ public class Extremity extends Mod{
             addCommands();
 
             netServer.clientCommands.<Player>register("difficulty", "[difficulty]", "Changes the Extremity difficulty level (0-3), or prints the current difficulty to chat", (args, player) -> {
-                if(args.length < 1)
+                if(args.length < 1){
                     player.sendMessage(Strings.format("[accent][Extremity] Current difficulty level is @ ([orange]@[])", getName(Manager.difficulty), Manager.difficulty));
+                    return;
+                }
 
                 if(vote != null && !vote.completed){
                     player.sendMessage("[accent][Extremity] [scarlet]A vote is already in progress, please wait before it finishes!");
