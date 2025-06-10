@@ -23,7 +23,6 @@ import mindustry.world.consumers.*;
 import java.nio.*;
 import java.util.Arrays;
 
-import static arc.Core.settings;
 import static mindustry.Vars.*;
 
 public class Manager{
@@ -464,6 +463,8 @@ public class Manager{
             UnitTypes.incite, Seq.with(UnitTypes.evoke)
         );
 
+        // Simple unitdex auto-assembler, should pick up most units added by mods, unless they use a custom production method
+        // In such case, use the Core.settings based unitdex loading for said mod, documented below this assembler
         content.blocks().select(b -> b instanceof Reconstructor || b instanceof UnitAssembler).each(b -> {
             if(b instanceof Reconstructor r){
                 r.upgrades.each(u -> {
@@ -487,19 +488,15 @@ public class Manager{
             }
         });
 
-        time += Time.elapsed();
+        time = Time.elapsed();
 
-        // Read settings to let mods add units without having this as a dependency
-        // To add a unit, do Core.settings.put("extremity-unitdex-" + your mod's internal name, unitdex string)
-        // where the unitdex string is [parent unit name/id]=[child unit name/id],
-        // or [parent unit name/id]=[child unit name/id],[child unit name/id] for multiple spawns, stacks indefinitely
-        // To set multiple different indexes, separate unitdex entries with : in this way [parent]=[child]:[parent]=[child]
+        // To add a custom unitdex, do Core.settings.put("extremity-unitdex-<your mod's internal name>", "<unitdex string>")
+        // Generate the unitdex string using the in-game unitdex editor, simply clear out all existing entries
+        // then create entries for the missing units, using the <unit> -> <spawns> scheme, and copy to clipboard
         // Only one unitdex string will be processed per mod, so make sure to include all the units in it
+        // Additionally, make sure the Core.settings.put() is ran every time the mod's being loaded, best if in the mod's main class
 
-        // Example unitdex strings:
-        // dagger=crawler:crawler=nova
-        // dagger=crawler,spiroct:spiroct=reign:reign=flare */
-
+        // Assembler for unitdexes stored as strings in the Core.settings
         Log.infoTag("Extremity", "Fetching entries from other mods...");
         Time.mark();
         Core.app.post(() -> {
@@ -530,10 +527,9 @@ public class Manager{
 
                         if(parent != null && !results.isEmpty())
                             spawns.put(parent, results.copy());
-                        else
-                            Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
+                        else Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
                     }
-                }else Log.infoTag("Extremity", Strings.format("Mod @ does not have any unitdex entries", m.meta.displayName));
+                }else Log.infoTag("Extremity", Strings.format("Mod @ does not have any custom unitdex entries", m.meta.displayName));
             });
         });
 

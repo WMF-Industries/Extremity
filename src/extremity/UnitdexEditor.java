@@ -1,6 +1,7 @@
 package extremity;
 
 import arc.*;
+import arc.graphics.Color;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -130,7 +131,13 @@ public class UnitdexEditor{
         buttonsRight.button("@extremity-reset", () -> {
             Manager.reload();
             rebuild();
-        }).width(120f);
+        }).width(120f).row();
+        buttonsRight.button("@extremity-clear", () ->
+            ui.showConfirm("@confirm", "@extremity-confirm-clear", () -> {
+                Manager.spawns.clear();
+                rebuild();
+            })
+        ).width(120f).row();
 
         buttonsLeft.button("@extremity-save", () -> {
             Table table = new Table();
@@ -139,12 +146,10 @@ public class UnitdexEditor{
             table.add(Strings.format("@: @", Core.bundle.get("extremity-current-name"), save));
 
             dexedit.reset();
-
             dexedit.fill(t ->
-                t.center().bottom().button("@extremity-save", () -> {
+                t.center().bottom().marginBottom(55f).button("@extremity-save", () -> {
                     customdexes.addUnique(save);
                     Core.settings.putJson("extremity-customdexes", String.class, customdexes);
-
                     Core.settings.put("extremity-customdex-" + save, Manager.packDex());
 
                     ui.showInfoFade(Strings.format("@ @", Core.bundle.get("extremity-saved"), save));
@@ -152,21 +157,23 @@ public class UnitdexEditor{
                 }).width(180f)
             );
 
+            dexedit.row();
             dexedit.fill(t -> {
                 t.center().add("@extremity-save-name").row();
                 t.field("", in -> {
                     String name = in.replaceAll("[^a-zA-Z0-9]", "");
-                    if(name.isEmpty()){
-                        save = "newdex";
-                    }else save = name;
+                    save = name.isEmpty() ? "newdex" : name;
 
                     table.reset();
-                    table.add(Strings.format("@: @", Core.bundle.get("extremity-current-name"), save));
+                    table.add(Strings.format("@: @", Core.bundle.get("extremity-current-name"), save)).row();
+
+                    if(customdexes.contains(save))
+                        table.add("@extremity-overwrite").color(Color.scarlet).row();
                 }).width(380f).row();
                 t.add(table).row();
             });
 
-            dexedit.addCloseButton();
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
             dexedit.show();
         }).width(180f).row();
         buttonsLeft.button("@extremity-load", () -> {
@@ -191,17 +198,17 @@ public class UnitdexEditor{
             });
 
             dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(220f));
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
 
-            dexedit.addCloseButton();
             dexedit.show();
         }).width(180f).row();
         buttonsLeft.button("@extremity-remove", () -> {
             dexedit.reset();
 
             dexedit.fill(t -> {
-                if(customdexes.isEmpty()){
+                if(customdexes.isEmpty())
                     t.center().add("@extremity-no-saves").width(220f);
-                }else{
+                else{
                     for(var string : customdexes){
                         if(string.isEmpty()) continue;
 
@@ -219,8 +226,8 @@ public class UnitdexEditor{
             });
 
             dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(220f));
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
 
-            dexedit.addCloseButton();
             dexedit.show();
         }).width(180f).row();
 
