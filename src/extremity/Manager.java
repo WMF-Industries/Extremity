@@ -44,7 +44,6 @@ public class Manager{
 
     static boolean[] covered;
     static boolean[] weathers = new boolean[3];
-    static boolean kill = false;
     static Item type;
     static int ammo, schedule;
     static float heat, req, time, damage;
@@ -102,8 +101,8 @@ public class Manager{
                 return;
             }
 
-            if(!state.rules.pvp && killCores && e.tile.block() instanceof CoreBlock)
-                kill = true;
+            if(killCores && e.tile.block() instanceof CoreBlock)
+                e.tile.team().cores().copy().each(Building::kill);
         });
 
         Events.on(EventType.WaveEvent.class, e -> {
@@ -123,7 +122,6 @@ public class Manager{
             units.clear();
             effects.clear();
 
-            kill = false;
             Arrays.fill(weathers, false);
             covered = new boolean[world.width() * world.height()];
 
@@ -219,12 +217,10 @@ public class Manager{
         universe.clearLoadoutInfo();
 
         // clears the tech tree
-        for(var node : planet.techNodes)
+        for(var node : planet.techNodes){
             node.reset();
-        content.each(c ->{
-            if(c instanceof UnlockableContent u && u.isOnPlanet(planet))
-                u.clearUnlock();
-        });
+            node.content.clearUnlock();
+        }
         Core.settings.remove("unlocks");
     }
 
@@ -248,21 +244,19 @@ public class Manager{
                     if(!state.rules.pvp && slowAllies)
                         u.apply(StatusEffects.slow, 300f);
 
-                    if(weatherEffects)
+                    if(weatherEffects && validUnit(u))
                         u.apply(StatusEffects.corroded, 180f);
                 }
             });
         }
 
         if(manageBullets) // bullets deal less damage if they're new
-            Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / (b.lifetime / b.time));
-
-        if(difficulty < 1) return;
+            Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / ((b.lifetime * 0.8f) / b.time));
 
         if(++schedule >= fixedRate)
             fixedUpdate();
 
-        if(state.rules.pvp || !weatherEffects || !damageBuildings)
+        if((!weatherEffects || !affectBuildings) && (!damageTurrets || !state.rules.pvp))
             return;
 
         Groups.build.each(b -> {
@@ -275,18 +269,19 @@ public class Manager{
         });
 
         world.tiles.eachTile(t -> {
-            if(t.build == null || !hasPlayers(t.team())) return;
+            if(t.build == null || (!hasPlayers(t.team()) && !state.rules.pvp)) return;
 
-            if(kill && t.build instanceof CoreBlock.CoreBuild core)
-                core.kill();
+            if(affectBuildings){
+                if(weathers[1])
+                    t.build.applySlowdown(0.35f, 2f);
+                if(weathers[2] && t.build.block instanceof Conveyor)
+                    t.build.applySlowdown(0.5f, 2f);
+            }
 
-            if(weathers[1]) // the weather slowdowns have to be simulated on both ends - they aren't synced!
-                t.build.applySlowdown(0.35f, 2f);
-            if(weathers[2] && t.build.block instanceof Conveyor)
-                t.build.applySlowdown(0.5f, 2f);
+            if(state.rules.pvp) return;
 
             damage = 0;
-            if(weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
+            if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
                 damage += 0.0083f * scaledRand();
             if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
                 damage += heat * scaledRand();
@@ -300,7 +295,7 @@ public class Manager{
     private static void fixedUpdate(){
         schedule = 0;
 
-        if(extraInvasions && state.isCampaign()){
+        if(extraInvasions && difficulty > 0 && state.isCampaign()){
             Planet planet = state.getPlanet();
             if(planet != null){
                 Seq<Sector> sectors = state.getPlanet().sectors;
@@ -401,7 +396,7 @@ public class Manager{
     }
 
     private static boolean validUnit(Unit u){
-        return !state.rules.pvp && u != null && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && (!covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
+        return u != null && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
     }
 
     private static int unitRand(){

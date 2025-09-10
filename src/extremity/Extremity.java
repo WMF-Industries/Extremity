@@ -57,7 +57,11 @@ public class Extremity extends Mod{
                     SettingCache.needsSync = true;
                     table.rebuild("extremity-weather", s);
                 }, null);
-                table.checkPref("extremity-buildings", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-weather", false) && Core.settings.getInt("extremity-difficulty") > 0);
+                table.confirmPref("extremity-buildings", false, s -> {
+                    SettingCache.needsSync = true;
+                    table.rebuild("extremity-buildings", s);
+                }, () -> Core.settings.getBool("extremity-weather", false));
+                table.checkPref("extremity-damage", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-buildings", false));
                 table.checkPref("extremity-bullets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-invasions", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-zones", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
