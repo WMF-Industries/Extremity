@@ -11,7 +11,7 @@ import static mindustry.Vars.*;
 
 public class SettingCache{
     public static int difficulty;
-    public static boolean resetCampaign, allowPvp, fastEnemies, slowAllies, damageTurrets, turretExplosions, killCores, damageBuildings, weatherEffects, manageBullets, extraInvasions, extendedZones;
+    public static boolean resetCampaign, allowPvp, fastEnemies, slowAllies, damageTurrets, turretExplosions, killCores, damageBuildings, weatherEffects, manageBullets, extraInvasions, extendedZones, guardianShielding;
 
     public static boolean needsSync, active;
 
@@ -36,7 +36,8 @@ public class SettingCache{
             weatherEffects = Core.settings.getBool("extremity-weather", false),
             manageBullets = Core.settings.getBool("extremity-bullets", false),
             extraInvasions = Core.settings.getBool("extremity-invasions", false),
-            extendedZones = Core.settings.getBool("extremity-zones", false)
+            extendedZones = Core.settings.getBool("extremity-zones", false),
+            guardianShielding = Core.settings.getBool("extremity-guardian", false)
         );
         writeBuffer.put((byte) difficulty);
 
@@ -93,7 +94,8 @@ public class SettingCache{
             weatherEffects,
             manageBullets,
             extraInvasions,
-            extendedZones
+            extendedZones,
+            guardianShielding
         );
         difficulty = readBuffer.get();
 

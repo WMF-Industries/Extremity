@@ -37,8 +37,9 @@ public class Extremity extends Mod{
                 table.checkPref("extremity-pvp", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-turrets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-explosions", false, s -> SettingCache.needsSync = true, null);
-                table.checkPref("extremity-enemies", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
-                table.checkPref("extremity-allies", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-guardian", false, s -> SettingCache.needsSync = true, null);
+                table.checkPref("extremity-enemies", false, s -> SettingCache.needsSync = true, null);
+                table.checkPref("extremity-allies", false, s -> SettingCache.needsSync = true, null);
                 table.confirmPref("extremity-campaign", false, c -> {
                     if(Core.settings.getBool("extremity-campaign", false)){
                         table.rebuild("extremity-campaign", false);
@@ -55,12 +56,12 @@ public class Extremity extends Mod{
                 table.confirmPref("extremity-weather", false, s -> {
                     SettingCache.needsSync = true;
                     table.rebuild("extremity-weather", s);
-                }, () -> Core.settings.getInt("extremity-difficulty") > 0);
-                table.checkPref("extremity-buildings", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-weather", false));
+                }, null);
+                table.checkPref("extremity-buildings", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-weather", false) && Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-bullets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-invasions", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-zones", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
-                table.sliderPref("extremity-rows", 1, 1, 3, 1, s ->  s + "", null);
+                table.sliderPref("extremity-rows", 1, 1, 3, s ->  s + "", null);
 
                 t.add(table);
             });

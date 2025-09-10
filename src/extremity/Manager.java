@@ -147,7 +147,12 @@ public class Manager{
         Events.on(EventType.PlayerLeave.class, e -> players.remove(e.player));
 
         Events.on(EventType.UnitDestroyEvent.class, e -> {
-            if(!host || difficulty < 1 || hasPlayers(e.unit.team)) return;
+            if(!host || hasPlayers(e.unit.team)) return;
+
+            if(guardianShielding && e.unit.hasEffect(StatusEffects.boss))
+                Units.nearby(e.unit.team, e.unit.x, e.unit.y, e.unit.range(), u -> u.apply(StatusEffects.shielded, Float.MAX_VALUE));
+
+            if(difficulty < 1) return;
 
             var tile = e.unit.tileOn();
             if(tile == null) return;
@@ -178,9 +183,6 @@ public class Manager{
                     effects.each(entry -> u.apply(entry.key, entry.value));
                 }
             });
-
-            if(difficulty >= 3 && e.unit.hasEffect(StatusEffects.boss))
-                Units.nearby(e.unit.team, e.unit.x, e.unit.y, e.unit.range(), u -> u.apply(StatusEffects.shielded, Float.MAX_VALUE));
         });
 
         Events.on(EventType.SectorLoseEvent.class, e -> {
@@ -234,12 +236,9 @@ public class Manager{
         if(needsSync && (headless || !ui.settings.isShown()))
             fetch();
 
-        if(difficulty < 1 || state.isEditor() || !state.isPlaying()) return;
+        if(state.isEditor() || !state.isPlaying()) return;
 
-        if(++schedule >= fixedRate)
-            fixedUpdate();
-
-        if(host && (fastEnemies || slowAllies || weatherEffects)){ // only the host has to apply effects, they're synced
+        if(host && (fastEnemies || slowAllies || weatherEffects)){
             Groups.unit.each(u -> u.type.playerControllable, u -> {
                 if(u == null || !u.isValid()) return;
 
@@ -258,7 +257,12 @@ public class Manager{
         if(manageBullets) // bullets deal less damage if they're new
             Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / (b.lifetime / b.time));
 
-        if(allowPvp || !weatherEffects || !damageBuildings)
+        if(difficulty < 1) return;
+
+        if(++schedule >= fixedRate)
+            fixedUpdate();
+
+        if(state.rules.pvp || !weatherEffects || !damageBuildings)
             return;
 
         Groups.build.each(b -> {
@@ -296,7 +300,7 @@ public class Manager{
     private static void fixedUpdate(){
         schedule = 0;
 
-        if(extraInvasions && difficulty > 0 && state.isCampaign()){
+        if(extraInvasions && state.isCampaign()){
             Planet planet = state.getPlanet();
             if(planet != null){
                 Seq<Sector> sectors = state.getPlanet().sectors;
@@ -368,7 +372,7 @@ public class Manager{
     }
 
     private static boolean hasPlayers(Team team){
-        return !allowPvp && ((!headless && team == player.team()) || team.data().players.size > 0);
+        return !state.rules.pvp && ((!headless && team == player.team()) || team.data().players.size > 0);
     }
 
     private static boolean validTurret(Building b){ //TODO: this is terrible... replace with something better eventually
