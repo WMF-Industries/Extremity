@@ -185,7 +185,7 @@ public class Manager{
 
         Events.on(EventType.SectorLoseEvent.class, e -> {
             if(resetCampaign)
-                restartCampaign(state.getPlanet());
+                restartCampaign(e.sector.planet);
         });
 
         Events.on(EventType.GameOverEvent.class, e -> {
@@ -217,11 +217,10 @@ public class Manager{
         universe.clearLoadoutInfo();
 
         // clears the tech tree
-        for(var node : planet.techNodes){
+        for(var node : planet.techTree.children){
             node.reset();
             node.content.clearUnlock();
         }
-        Core.settings.remove("unlocks");
     }
 
     private static UnitType getUnit(String input){
@@ -396,7 +395,7 @@ public class Manager{
     }
 
     private static boolean validUnit(Unit u){
-        return u != null && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
+        return u != null && (hasPlayers(u.team) || state.rules.pvp) && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
     }
 
     private static int unitRand(){
