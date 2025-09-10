@@ -24,13 +24,13 @@ import java.nio.*;
 import java.util.Arrays;
 
 import static mindustry.Vars.*;
+import static extremity.SettingCache.*;
 
 public class Manager{
     public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
-    public static class ExtremityLoseEvent{};
 
-    static boolean host = false, allowPvp = false, resetCampaign = false;
-    static int difficulty = 3; // highest by default
+    static boolean host = false;
+    static String modVersion;
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
 
@@ -61,55 +61,32 @@ public class Manager{
         });
 
         Core.app.post(() -> {
-            netServer.addBinaryPacketHandler("extremity-resync", (player, content) -> sync(player, content[0] >= 1));
-            netServer.addPacketHandler("extremity-confirm", (player, version) ->{
-                players.addUnique(player);
+            netServer.addBinaryPacketHandler("extremity-syncreq", (player, content) -> sync(player));
+            netServer.addPacketHandler("extremity-confirm", (player, version) -> {
+                if(players.addUnique(player)){
+                    if(!version.equals(modVersion))
+                        Call.clientPacketReliable(player.con, "extremity-error", modVersion);
 
-                if(!version.equals(version()))
-                    Call.clientPacketReliable(player.con, "extremity-error", version());
-
-                int ver = Strings.parseInt(version().replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
-                if(ver < comp){
-                    if(headless)
-                        Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", version(), version));
-                    else ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), version(), version));
+                    int ver = Strings.parseInt(modVersion.replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
+                    if(ver < comp){
+                        if(headless)
+                            Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", modVersion, version));
+                        else
+                            ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), modVersion, version));
+                    }
                 }
             });
 
             if(headless) return;
 
             netClient.addPacketHandler("extremity-error", ver ->
-                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), version(), ver), 10f)
+                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), modVersion, ver), 10f)
             );
-            netClient.addBinaryPacketHandler("extremity-config", cfg -> {
-                ByteBuffer data = ByteBuffer.wrap(cfg);
-                boolean initial = false;
-
-                switch(data.get()){
-                    case 1: initial = true;
-                    case 2: allowPvp = true;
-                    case 3: {
-                        initial = true;
-                        allowPvp = true;
-                    }
-                }
-
-                difficulty = data.get();
-                if(difficulty <= -1){
-                    ui.showInfoFade(Core.bundle.get("extremity-fail"), 10f);
-                    Call.serverBinaryPacketReliable("extremity-resync", ByteBuffer.allocate(1).put((byte) (initial ? 1 : 0)).array());
-                }else if(initial){
-                    ui.showInfoFade(Strings.format(Core.bundle.get("extremity-success"), toName()), 10f);
-                    Call.serverPacketReliable("extremity-confirm", version());
-                }
-            });
+            netClient.addBinaryPacketHandler("extremity-config", SettingCache::apply);
         });
 
-
         Events.on(EventType.BlockDestroyEvent.class, e -> {
-            if(difficulty < 2) return;
-
-            if(validTurret(e.tile.build)){
+            if(turretExplosions && validTurret(e.tile.build)){
                 var block = e.tile.build.block;
                 float rng = 0, exp = type.explosiveness * ammo, flb = type.flammability * ammo, pwr = 350 * type.charge * ammo;
 
@@ -125,12 +102,12 @@ public class Manager{
                 return;
             }
 
-            if(difficulty >= 5 && e.tile.block() instanceof CoreBlock)
+            if(!state.rules.pvp && killCores && e.tile.block() instanceof CoreBlock)
                 kill = true;
         });
 
         Events.on(EventType.WaveEvent.class, e -> {
-            if(difficulty < 2) return;
+            if(!extendedZones || difficulty < 1) return;
 
             Seq<Building> builds = new Seq<>();
             spawner.getSpawns().each(t -> {
@@ -139,46 +116,31 @@ public class Manager{
                         builds.addUnique(tmp.build);
                 });
             });
-            builds.each(b -> b.damage(b.maxHealth / (4f / (difficulty - 1))));
+            builds.each(b -> b.damage(b.maxHealth / Math.max(0.1f, (4f / difficulty))));
         });
-
-        if(!headless) Events.on(EventType.WorldLoadBeginEvent.class, e -> difficulty = -1);
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
             units.clear();
             effects.clear();
 
             kill = false;
-
             Arrays.fill(weathers, false);
             covered = new boolean[world.width() * world.height()];
 
             host = net.server() || !net.active();
             if(host){
-                if(headless)
-                    allowPvp = state.rules.pvp;
-                else{
-                    allowPvp = (Core.settings.getBool("extremity-pvp", false) && state.rules.pvp);
-                    difficulty = Core.settings.getInt("extremity-difficulty", -1);
-                    resetCampaign = difficulty > 3 || Core.settings.getBool("extremity-one-life", false);
-                    ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-welcome"), toName()));
-                }
-
-                players.each(Manager::sync);
+                fetch();
+                if(!headless && active)
+                    ui.chatfrag.addMessage(Core.bundle.get("extremity-welcome"));
             }
         });
 
         Events.on(EventType.PlayerJoin.class, e -> {
             if(host){
-                sync(e.player, true);
+                sync(e.player);
                 Timer.schedule(() -> {
                     if(!players.contains(e.player)) // this isn't in a bundle cause of dedicated servers
-                        e.player.sendMessage(
-                            Strings.format(
-                                "[accent]Welcome!\n\nThe host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[]!\nConsider installing the mod to greatly reduce certain desyncs!\n\nCurrent difficulty is @!\nView the mod's tutorial using /extremity\nGood luck.",
-                                Extremity.getName(difficulty)
-                            )
-                        );
+                        e.player.sendMessage("[accent]Welcome!\n\n[lightgray]The host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[][][]!\nConsider installing the mod to reduce certain desyncs!");
                 }, 3f);
             }
         });
@@ -227,13 +189,8 @@ public class Manager{
         });
 
         Events.on(EventType.GameOverEvent.class, e -> {
-            if(resetCampaign){
-                if(difficulty > 3)
-                    Events.fire(new ExtremityLoseEvent());
-
-                if(state.isCampaign())
-                    restartCampaign(state.getPlanet());
-            }
+            if(resetCampaign && state.isCampaign())
+                restartCampaign(state.getPlanet());
         });
     }
 
@@ -274,42 +231,44 @@ public class Manager{
     }
 
     private static void update(){
+        if(needsSync && (headless || !ui.settings.isShown()))
+            fetch();
+
         if(difficulty < 1 || state.isEditor() || !state.isPlaying()) return;
 
         if(++schedule >= fixedRate)
             fixedUpdate();
 
-        if(host && difficulty >= 2){ // only the host has to apply effects, they're synced
+        if(host && (fastEnemies || slowAllies || weatherEffects)){ // only the host has to apply effects, they're synced
             Groups.unit.each(u -> u.type.playerControllable, u -> {
                 if(u == null || !u.isValid()) return;
 
-                if(!hasPlayers(u.team))
+                if(fastEnemies && !hasPlayers(u.team))
                     u.apply(StatusEffects.fast, 300f);
                 else{
-                    if(difficulty >= 3)
+                    if(!state.rules.pvp && slowAllies)
                         u.apply(StatusEffects.slow, 300f);
 
-                    if(validUnit(u))
+                    if(weatherEffects)
                         u.apply(StatusEffects.corroded, 180f);
                 }
             });
         }
 
-        if(difficulty >= 4) // bullets deal less damage if they're new
+        if(manageBullets) // bullets deal less damage if they're new
             Groups.bullet.each(b -> hasPlayers(b.team), b -> b.damage = b.type.damage / (b.lifetime / b.time));
 
-        if(allowPvp) return;
+        if(allowPvp || !weatherEffects || !damageBuildings)
+            return;
 
-        if(difficulty <= 3){
-            Groups.build.each(b -> {
-                if(b instanceof ForceProjector.ForceBuild build){
-                    b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
-                        if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
-                            covered[tx + ty * world.width()] = true;
-                    });
-                }
-            });
-        }
+        Groups.build.each(b -> {
+            if(b instanceof ForceProjector.ForceBuild build){
+                b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
+                    if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
+                        covered[tx + ty * world.width()] = true;
+                });
+            }
+        });
 
         world.tiles.eachTile(t -> {
             if(t.build == null || !hasPlayers(t.team())) return;
@@ -322,12 +281,10 @@ public class Manager{
             if(weathers[2] && t.build.block instanceof Conveyor)
                 t.build.applySlowdown(0.5f, 2f);
 
-            if(!host) return;
-
             damage = 0;
             if(weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
                 damage += 0.0083f * scaledRand();
-            if(validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
+            if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
                 damage += heat * scaledRand();
 
             if(damage > 0)
@@ -339,14 +296,14 @@ public class Manager{
     private static void fixedUpdate(){
         schedule = 0;
 
-        if(difficulty >= 3 && state.isCampaign()){
+        if(extraInvasions && difficulty > 0 && state.isCampaign()){
             Planet planet = state.getPlanet();
             if(planet != null){
                 Seq<Sector> sectors = state.getPlanet().sectors;
                 if(!sectors.isEmpty()){
                     int captured = sectors.count(Sector::isCaptured);
                     if(captured > Math.max(2, 8 / difficulty)){
-                        float ratio = (float) captured / sectors.count(Sector::isAttacked), max = difficulty * 0.078f;
+                        float ratio = (float) captured / sectors.count(Sector::isAttacked), max = difficulty * 0.024f;
                         if(ratio < max && canInvade()){
                             Sector sector = sectors.select(Sector::isCaptured).random();
                             int waveMax = Math.max(sector.info.winWave, sector.isBeingPlayed() ? state.wave : sector.info.wave + sector.info.wavesPassed) + Mathf.random(1, difficulty) * 5;
@@ -372,34 +329,36 @@ public class Manager{
             }
         }
 
-        Arrays.fill(weathers, false);
-        Groups.weather.each(state -> {
-            if(state.weather == Weathers.rain)
-                weathers[0] = true;
-            else if(state.weather == Weathers.snow)
-                weathers[1] = true;
-            else if(state.weather == Weathers.sandstorm)
-                weathers[2] = true;
-        });
+        if(weatherEffects){
+            Arrays.fill(weathers, false);
+            Groups.weather.each(state -> {
+                if(state.weather == Weathers.rain)
+                    weathers[0] = true;
+                else if(state.weather == Weathers.snow)
+                    weathers[1] = true;
+                else if(state.weather == Weathers.sandstorm)
+                    weathers[2] = true;
+            });
+        }
     }
 
     private static boolean canInvade(){
-        float chance , period;
+        float chance, period;
 
         switch(difficulty){
-            case 3: {
+            case 3 -> {
                 chance = 0.000043f;
                 period = 14400f;
             }
-            case 4: {
+            case 4 -> {
                 chance = 0.00005f;
                 period = 7200f;
             }
-            case 5: {
+            case 5 -> {
                 chance = 0.00013f;
                 period = 5400f;
             }
-            default: {
+            default -> {
                 chance = 0.0002f;
                 period = 1800f;
             }
@@ -413,7 +372,7 @@ public class Manager{
     }
 
     private static boolean validTurret(Building b){ //TODO: this is terrible... replace with something better eventually
-        if(difficulty < 2 || b == null || !b.block.hasLiquids)
+        if(b == null || !b.block.hasLiquids)
             return false;
 
         if(!(b instanceof Turret.TurretBuild build))
@@ -497,9 +456,10 @@ public class Manager{
         // Additionally, make sure the Core.settings.put() is ran every time the mod's being loaded, best if in the mod's main class
 
         // Assembler for unitdexes stored as strings in the Core.settings
-        Log.infoTag("Extremity", "Fetching entries from other mods...");
-        Time.mark();
         Core.app.post(() -> {
+            Log.infoTag("Extremity", "Fetching entries from other mods...");
+            Time.mark();
+
             Seq<UnitType> results = new Seq<>();
             mods.eachEnabled(m -> {
                 if(m.meta.internalName.equals("extremity")) return;
@@ -531,9 +491,9 @@ public class Manager{
                     }
                 }else Log.infoTag("Extremity", Strings.format("Mod @ does not have any custom unitdex entries", m.meta.displayName));
             });
-        });
 
-        Log.infoTag("Extremity", Strings.format("Created @ entries in @ms!", spawns.size, Math.round(time + Time.elapsed())));
+            Log.infoTag("Extremity", Strings.format("Created @ entries in @ms!", spawns.size, Math.round(time + Time.elapsed())));
+        });
     }
 
     public static String packDex(){
@@ -589,20 +549,15 @@ public class Manager{
         }else Log.infoTag("Extremity", Strings.format("Save @ does not have any unitdex entries", name));
     }
 
-    private static String toName(){
-        return Core.bundle.get("extremity-diff" + difficulty);
-    }
+    public static void syncAll(){
+        if(!state.isPlaying()) return;
 
-    private static String version(){
-        return mods.getMod("extremity").meta.version;
+        Groups.player.each(Manager::sync);
     }
 
     private static void sync(Player player){
-        sync(player, false);
-    }
+        if(!state.isPlaying()) return;
 
-    private static void sync(Player player, boolean initial){
-        byte packed = (byte) ((initial ? 1 : 0) + (allowPvp ? 2 : 0));
-        Call.clientBinaryPacketReliable(player.con, "extremity-config", ByteBuffer.allocate(2).put(packed).put((byte) difficulty).array());
+        Call.clientBinaryPacketReliable(player.con, "extremity-config", writeBuffer.array());
     }
 }

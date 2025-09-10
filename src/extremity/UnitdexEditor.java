@@ -34,7 +34,7 @@ public class UnitdexEditor{
             t.top().right().marginTop(30f).add(buttonsRight);
             t.fill(sub -> sub.top().left().marginTop(30f).add(buttonsLeft));
             t.fill(sub -> sub.bottom().left().add(buttonsBottom));
-            t.fill(sub -> //
+            t.fill(sub ->
                 sub.center().top().marginTop(40f).marginBottom(90f).table(entry ->
                     canvas = entry.pane(editor).size(entry.getWidth(), entry.getWidth()).scrollX(false).growX()
                 )
@@ -53,7 +53,6 @@ public class UnitdexEditor{
         buttonsBottom.reset();
 
         editor.reset();
-        editor.defaults();
         editor.setWidth(Core.graphics.getWidth());
 
         if(Manager.spawns.size > 0){

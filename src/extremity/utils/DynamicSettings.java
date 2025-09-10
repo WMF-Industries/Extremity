@@ -179,6 +179,8 @@ public class DynamicSettings extends SettingsMenuDialog{
         public static class SliderSetting extends Setting{
             int def, min, max, step;
             StringProcessor sp;
+            Slider slider;
+            public Runnable changed;
 
             public SliderSetting(String name, int def, int min, int max, int step, StringProcessor s, Boolp visibility){
                 super(name, visibility);
@@ -187,12 +189,12 @@ public class DynamicSettings extends SettingsMenuDialog{
                 this.max = max;
                 this.step = step;
                 this.sp = s;
+
+                this.slider = new Slider(min, max, step, false);
             }
 
             @Override
             public void add(DynamicTable table){
-                Slider slider = new Slider(min, max, step, false);
-
                 slider.setValue(settings.getInt(name));
 
                 Label value = new Label("", Styles.outlineLabel);
@@ -203,6 +205,9 @@ public class DynamicSettings extends SettingsMenuDialog{
                 content.touchable = Touchable.disabled;
 
                 slider.changed(() -> {
+                    if(changed != null && slider.getValue() != settings.getInt(name))
+                        changed.run();
+
                     settings.put(name, (int)slider.getValue());
                     value.setText(sp.get((int)slider.getValue()));
                 });

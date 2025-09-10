@@ -11,64 +11,69 @@ import extremity.utils.*;
 import static mindustry.Vars.*;
 
 public class Extremity extends Mod{
+    public final int highestScale = 10;
     public Session vote;
 
     public Extremity(){
         Manager.setup();
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
-            UnitdexEditor.init();
-            addCommands();
+            fetchVersion();
 
+            UnitdexEditor.init();
             if(!Core.settings.getBool("extremity-init", false)){
                 ui.showStartupInfo("@extremity-info");
                 Core.settings.put("extremity-init", true);
             }
 
-            ui.settings.addCategory(Core.bundle.get("extremity-category"), Icon.book, t ->{
+            ui.settings.addCategory(Core.bundle.get("extremity-category"), Icon.book, t -> {
                 DynamicSettings.DynamicTable table = new DynamicSettings.DynamicTable();
-                table.addDefaults = () -> !Core.settings.getBool("extremity-beyond", false);
 
-                table.sliderPref("extremity-difficulty", 0, 0, 3, s -> Core.bundle.get("extremity-diff" + s), () -> !Core.settings.getBool("extremity-beyond"));
-                table.sliderPref("extremity-difficulty", 4, 4, 7, s -> Core.bundle.get("extremity-diff" + s), () -> Core.settings.getBool("extremity-beyond"));
-                table.confirmPref("extremity-beyond", false, c ->
-                    ui.showConfirm("@confirm", "@setting.extremity-beyond.confirm", () -> table.rebuild("extremity-beyond", true)
-                ), () -> !Core.settings.getBool("extremity-beyond"));
-                table.confirmPref("extremity-one-life", false, c -> {
-                    if(Core.settings.getBool("extremity-one-life", false))
-                        table.rebuild("extremity-one-life", false);
-                    else ui.showConfirm("@confirm", "@setting.extremity-one-life.confirm", () -> table.rebuild("extremity-one-life", true));
-                }, () -> !Core.settings.getBool("extremity-beyond"));
-                table.checkPref("extremity-pvp", false, null, null);
-                table.sliderPref("extremity-rows", 1, 1, 3, 1, s -> s + "", null);
+                var slider = table.sliderPref("extremity-difficulty", 0, 0, highestScale, s -> s + "", null);
+                slider.changed = () -> {
+                    SettingCache.needsSync = true;
+                    Core.app.post(table::rebuild);
+                };
+                table.checkPref("extremity-pvp", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-turrets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-explosions", false, s -> SettingCache.needsSync = true, null);
+                table.checkPref("extremity-enemies", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-allies", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.confirmPref("extremity-campaign", false, c -> {
+                    if(Core.settings.getBool("extremity-campaign", false)){
+                        table.rebuild("extremity-campaign", false);
+                        SettingCache.needsSync = true;
+                        return;
+                    }
+
+                    ui.showConfirm("@confirm", "@setting.extremity-campaign.confirm", () -> {
+                        table.rebuild("extremity-campaign", true);
+                        SettingCache.needsSync = true;
+                    });
+                }, null);
+                table.checkPref("extremity-cores", false, s -> SettingCache.needsSync = true, null);
+                table.confirmPref("extremity-weather", false, s -> {
+                    SettingCache.needsSync = true;
+                    table.rebuild("extremity-weather", s);
+                }, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-buildings", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-weather", false));
+                table.checkPref("extremity-bullets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-invasions", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.checkPref("extremity-zones", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
+                table.sliderPref("extremity-rows", 1, 1, 3, 1, s ->  s + "", null);
 
                 t.add(table);
-
-                Events.on(Manager.ExtremityLoseEvent.class, ev -> {
-                    // make sure it sets the difficulty to default
-                    Core.settings.put("extremity-beyond", false);
-                    table.rebuild("extremity-difficulty", 0);
-                });
             });
             ui.menufrag.addButton("@extremity-unitdex-button", Icon.pencil, UnitdexEditor::show);
-
-            Events.on(EventType.ClientChatEvent.class, ev -> {
-                if(!net.client()) return;
-
-                if(ev.message.equals("/extremity"))
-                    Tutorial.start(player);
-            });
-
-            Tutorial.setupClient();
         });
 
-        Events.on(EventType.ServerLoadEvent.class, e ->{
-            StringBuilder dex = new StringBuilder();
-            addCommands();
+        Events.on(EventType.ServerLoadEvent.class, e -> {
+            fetchVersion();
 
-            netServer.clientCommands.<Player>register("difficulty", "[difficulty]", "Changes the Extremity difficulty level (0-3), or prints the current difficulty to chat", (args, player) -> {
+            StringBuilder dex = new StringBuilder();
+            netServer.clientCommands.<Player>register("difficulty", "[difficulty]", "Changes the Extremity difficulty scale (0-10), or prints the current difficulty to chat", (args, player) -> {
                 if(args.length < 1){
-                    player.sendMessage(Strings.format("[accent][Extremity] Current difficulty level is @ ([orange]@[])", getName(Manager.difficulty), Manager.difficulty));
+                    player.sendMessage(Strings.format("[accent][Extremity] Current difficulty scale is @", SettingCache.difficulty));
                     return;
                 }
 
@@ -77,7 +82,7 @@ public class Extremity extends Mod{
                     return;
                 }
 
-                vote = new Session(player, Mathf.clamp(Strings.parseInt(args[0]), 0, player.admin || Core.settings.getBool("extremity-beyond-public", false) ? 7 : 3));
+                vote = new Session(player, Mathf.clamp(Strings.parseInt(args[0]), 0, highestScale));
             });
             netServer.clientCommands.<Player>register("diffvote", "<yes/no>", "Submits a vote for the difficulty changing session", (args, player) -> {
                 if(vote == null || vote.completed){
@@ -114,7 +119,7 @@ public class Extremity extends Mod{
                     if(player.admin){
                         Call.sendMessage("[accent][Extremity] Difficulty vote force-passed by " + player.coloredName());
 
-                        Manager.difficulty = vote.difficulty;
+                        SettingCache.difficulty = vote.difficulty;
                         vote.stop();
                     }else Call.sendMessage("[accent][Extremity] [scarlet]Insufficient permissions.");
 
@@ -159,42 +164,27 @@ public class Extremity extends Mod{
                 dex.append(args[0]);
                 player.sendMessage("[accent][Extremity] Saved unitdex data in cache\nType [accent]/unitdex submit[] to apply when ready!");
             });
-
-            Tutorial.setupServer();
         });
     }
 
-    // adds the universal local & dedicated server commands
-    public static void addCommands(){
-        netServer.clientCommands.<Player>register("extremity", "Shows the Extremity's tutorial", (args, player) -> {
-            // this will be handled clientside
-            if(Manager.players.contains(player)) return;
+    public void fetchVersion(){
+        var mod = mods.list().find(m -> m.main.equals(this));
+        if(mod != null && mod.meta != null)
+            Manager.modVersion = mod.meta.version;
 
-            Tutorial.start(player);
-        });
-    }
-
-    public static String getName(int difficulty){
-        return switch(difficulty){
-            case 0 -> "[lime]Vanilla[]";
-            case 1 -> "[yellow]Mediocrity[]";
-            case 2 -> "[orange]Fatality[]";
-            case 3 -> "[scarlet]True Extremity[]";
-            case 4 -> "[#c40004]High Mediocrity[] [scarlet](Beyond Mode)[]";
-            case 5 -> "[#cf0078]Prime Fatality[] [scarlet](Beyond Mode)[]";
-            case 6 -> "[#a000ba]Peak Extremity[] [scarlet](Beyond Mode)[]";
-            case 7 -> "[#45015f]Real Insanity[] [scarlet](Beyond Mode)[]";
-            default -> "[stat]Error[]";
-        };
+        if(Manager.modVersion == null){
+            Log.infoTag("Extremity","Failed to fetch the version.");
+            Manager.modVersion = "err";
+        }
     }
 
     @Override
     public void registerServerCommands(CommandHandler handler){
-        handler.register("difficulty","[int]",  "0 Vanilla, 1 Mediocrity, 2 Fatality, 3 True Extremity", i -> {
+        handler.register("difficulty","[int]",  "Sets the difficulty scale that Extremity will use", i -> {
             if(i.length >= 1){
-                Manager.difficulty = Mathf.clamp(Strings.parseInt(i[0], 3), 0, 7);
-                Log.info(Strings.format("Set difficulty to @", Strings.stripColors(getName(Manager.difficulty))));
-            }else Log.info(Strings.format("Current difficulty is @", Strings.stripColors(getName(Manager.difficulty))));
+                SettingCache.difficulty = Mathf.clamp(Strings.parseInt(i[0], 3), 0, highestScale);
+                Log.info(Strings.format("Set difficulty scale to @", SettingCache.difficulty));
+            }else Log.info(Strings.format("Current difficulty scale is @", SettingCache.difficulty));
         });
         handler.register("unitdex", "[dex]", "Sets or prints the current unitdex", i -> {
             if(i.length >= 1){

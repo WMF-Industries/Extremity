@@ -65,17 +65,15 @@ public class Session{
         }
 
         votes.put(player.uuid(), res);
-        Call.sendMessage(Strings.format("@ [white] voted @ changing the difficulty to @ (@/@)\nVote using /diffvote (y/n)", player.coloredName(), res ? "in favor of" : "against", Extremity.getName(difficulty), votes(), votesRequired()));
+        Call.sendMessage(Strings.format("@ [white] voted @ changing the difficulty scale to @ (@/@)\nVote using /diffvote (y/n)", player.coloredName(), res ? "in favor of" : "against", SettingCache.difficulty, votes(), votesRequired()));
 
-        if(!initial && refreshState()){
+        if(!initial && refreshState())
             time += 10;
-            Call.sendMessage("[accent][Extremity][] Added 10 seconds to the voting session.");
-        }
     }
 
     public void success(){
-        Call.sendMessage(Strings.format("[accent][Extremity][] Difficutly change vote passed, setting difficulty to @!", Extremity.getName(difficulty)));
-        Manager.difficulty = difficulty;
+        Call.sendMessage(Strings.format("[accent][Extremity][] Difficultly change vote passed, setting difficulty scale to @!", SettingCache.difficulty));
+        SettingCache.difficulty = difficulty;
         stop();
     }
 
