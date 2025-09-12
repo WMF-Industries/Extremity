@@ -123,6 +123,11 @@ public class Manager{
             units.clear();
             effects.clear();
 
+            if(state.isEditor()){
+                host = false;
+                return;
+            }
+
             Arrays.fill(weathers, false);
             covered = new boolean[world.width() * world.height()];
 
@@ -549,13 +554,13 @@ public class Manager{
     }
 
     public static void syncAll(){
-        if(!state.isPlaying()) return;
+        if(!state.isGame()) return;
 
         Groups.player.each(Manager::sync);
     }
 
     private static void sync(Player player){
-        if(!state.isPlaying()) return;
+        if(!state.isGame()) return;
 
         Call.clientBinaryPacketReliable(player.con, "extremity-config", writeBuffer.array());
     }
