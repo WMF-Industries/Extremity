@@ -23,6 +23,7 @@ import mindustry.world.consumers.*;
 import java.nio.*;
 import java.util.Arrays;
 
+import static extremity.utils.DedicatedBundles.*;
 import static mindustry.Vars.*;
 import static extremity.SettingCache.*;
 
@@ -40,7 +41,7 @@ public class Manager{
     private final static ObjectFloatMap<StatusEffect> effects = new ObjectFloatMap<>();
 
     final static Interval intervals = new Interval(1);
-    final static Seq<Player> players = new Seq<>();
+    final static Seq<Player> players = new Seq<>(false);
 
     static boolean[] covered;
     static boolean[] weathers = new boolean[3];
@@ -137,8 +138,8 @@ public class Manager{
             if(host){
                 sync(e.player);
                 Timer.schedule(() -> {
-                    if(!players.contains(e.player)) // this isn't in a bundle cause of dedicated servers
-                        e.player.sendMessage("[accent]Welcome!\n\n[lightgray]The host's running [scarlet]Extremity[], a difficulty enhancing mod by [green]W[orange]M[brown]F[][][]!\nConsider installing the mod to reduce certain desyncs!");
+                    if(!players.contains(e.player))
+                        e.player.sendMessage(dynamicLocale(e.player).get("net.extremity-welcome"));
                 }, 3f);
             }
         });

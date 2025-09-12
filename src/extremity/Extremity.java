@@ -9,18 +9,19 @@ import mindustry.mod.*;
 import extremity.utils.*;
 
 import static mindustry.Vars.*;
+import static extremity.utils.DedicatedBundles.*;
 
 public class Extremity extends Mod{
     public final int highestScale = 10;
-    public Session vote;
+    public VoteSession diff, modi;
 
     public Extremity(){
         Manager.setup();
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
             fetchVersion();
-
             UnitdexEditor.init();
+
             if(!Core.settings.getBool("extremity-init", false)){
                 ui.showStartupInfo("@extremity-info");
                 Core.settings.put("extremity-init", true);
@@ -76,22 +77,55 @@ public class Extremity extends Mod{
             fetchVersion();
 
             StringBuilder dex = new StringBuilder();
-            netServer.clientCommands.<Player>register("difficulty", "[difficulty]", "Changes the Extremity difficulty scale (0-10), or prints the current difficulty to chat", (args, player) -> {
+            netServer.clientCommands.<Player>register("difficulty", "[difficulty/vote]", "Changes the Extremity difficulty scale (0-10), or prints the current difficulty to chat", (args, player) -> {
                 if(args.length < 1){
-                    player.sendMessage(Strings.format("[accent][Extremity] Current difficulty scale is @", SettingCache.difficulty));
+                    player.sendMessage(Strings.format(dynamicLocale(player).get("cmd.extremity-difficulty"), SettingCache.difficulty));
                     return;
                 }
 
-                if(vote != null && !vote.completed){
-                    player.sendMessage("[accent][Extremity] [scarlet]A vote is already in progress, please wait before it finishes!");
-                    return;
-                }
+                if(diff == null || diff.completed){
+                    if(!Strings.canParseInt(args[0])){
+                        player.sendMessage(dynamicLocale(player).get("vote.extremity-invalid.difficulty"));
+                        return;
+                    }
 
-                vote = new Session(player, Mathf.clamp(Strings.parseInt(args[0]), 0, highestScale));
-            });
-            netServer.clientCommands.<Player>register("diffvote", "<yes/no>", "Submits a vote for the difficulty changing session", (args, player) -> {
-                if(vote == null || vote.completed){
-                    player.sendMessage("[accent][Extremity] [scarlet]No vote session ongoing, please start one before voting!");
+                    int votediff = Mathf.clamp(Strings.parseInt(args[0]), 0, highestScale);
+                    diff = new VoteSession(player){{
+                        onVote = (p, vote) -> Groups.player.each(pl ->
+                            pl.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(pl).get(vote ? "vote.extremity-voted.difficulty" : "vote.extremity-voted-against.difficulty"),
+                                    p.coloredName(), votediff, votes(), votesRequired()
+                                )
+                            )
+                        );
+                        onTime = () -> Groups.player.each(pl ->
+                            pl.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(pl).get("vote.extremity-time.difficulty"),
+                                    time
+                                )
+                            )
+                        );
+                        onFailure = () -> Groups.player.each(pl ->
+                            pl.sendMessage(
+                                dynamicLocale(pl).get("vote.extremity-fail.difficulty")
+                            )
+                        );
+                        onSuccess = () -> {
+                            Groups.player.each(pl ->
+                                pl.sendMessage(
+                                    Strings.format(
+                                        dynamicLocale(pl).get("vote.extremity-success.difficulty"),
+                                        votediff
+                                    )
+                                )
+                            );
+
+                            Core.settings.put("extremity-difficulty", votediff);
+                            SettingCache.fetch();
+                        };
+                    }};
                     return;
                 }
 
@@ -104,38 +138,172 @@ public class Extremity extends Mod{
                 };
 
                 if(res <= -2){
-                    player.sendMessage("[accent][Extremity] [scarlet]Invalid parameter, please type yes (y) or no (n) in order to vote!");
+                    player.sendMessage(dynamicLocale(player).get("vote.extremity-invalid.difficulty"));
                     return;
                 }
 
                 if(res == -1){
-                    if(vote.player == player || player.admin){
-                        if(player.admin)
-                            Call.sendMessage("[accent][Extremity] Difficulty vote was cancelled by " + player.coloredName());
-                        else Call.sendMessage("[accent][Extremity] Initiator has cancelled the difficulty vote.");
+                    if(diff.initiator == player || player.admin){
+                        String key = player.admin ? "vote.extremity-cancelled-admin" : "vote.extremity-cancelled";
+                        Groups.player.each(p ->
+                            Call.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(p).get(key),
+                                    player.coloredName()
+                                )
+                            )
+                        );
 
-                        vote.stop();
-                    }else Call.sendMessage("[accent][Extremity] [scarlet]Insufficient permissions.");
+                        diff.quit();
+                    }else player.sendMessage(dynamicLocale(player).get("cmd.extremity-insufficient"));
 
                     return;
                 }
 
                 if(res == 2){
                     if(player.admin){
-                        Call.sendMessage("[accent][Extremity] Difficulty vote force-passed by " + player.coloredName());
+                        Groups.player.each(p ->
+                            Call.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(p).get("vote.extremity-skip"),
+                                    player.coloredName()
+                                )
+                            )
+                        );
 
-                        SettingCache.difficulty = vote.difficulty;
-                        vote.stop();
-                    }else Call.sendMessage("[accent][Extremity] [scarlet]Insufficient permissions.");
+                        diff.success();
+                    }else player.sendMessage(dynamicLocale(player).get("cmd.extremity-insufficient"));
 
                     return;
                 }
 
-                vote.vote(player, res == 1);
+                diff.vote(player, res == 1);
+            });
+            netServer.clientCommands.<Player>register("modifiers", "[page]", "Returns a modifier list page.", (args, player) -> {
+                int page = 1;
+                if(args.length > 0)
+                    page = Mathf.clamp(Strings.parseInt(args[0], 1), 1, SettingCache.List.pages);
+
+                int offset = 5 * (page - 1);
+                StringBuilder sb = new StringBuilder();
+
+                I18NBundle locale = dynamicLocale(player);
+                sb.append(locale.get("list.extremity-modifiers-begin"));
+                for(int i = offset; i < offset + 5; i++){
+                    SettingCache.List entry = SettingCache.List.all.get(i);
+
+                    sb.append("\n[lightgray](id: ").append(i).append(") >[] ").append(entry.setting.get() ? "[lime]" : "[scarlet]").append(locale.get(entry.local + ".name")).append("[]");
+
+                    String desc = locale.get(entry.local + ".description").replaceAll("\n", "\n  [slate][?]:[] ");
+                    sb.append("\n  [slate][?]:[] ").append(desc).append("\n");
+                }
+                sb.append(Strings.format(locale.get("list.extremity-modifiers-end"), page, SettingCache.List.pages));
+
+                player.sendMessage(sb.toString());
+            });
+            netServer.clientCommands.<Player>register("modifier", "<id/vote>", "Starts a vote to change the modifier state", (args, player) -> {
+                if(modi == null || modi.completed){
+                    if(!Strings.canParsePositiveInt(args[0]) || Strings.parseInt(args[0]) > SettingCache.List.all.size){
+                        player.sendMessage(dynamicLocale(player).get("vote.extremity-invalid.modifier"));
+                        return;
+                    }
+
+                    SettingCache.List entry = SettingCache.List.all.get(Strings.parseInt(args[0]));
+                    modi = new VoteSession(player){{
+                        onVote = (p, vote) -> {
+                            String string = (vote ? "vote.extremity-voted.modifier" : "vote.extremity-voted-against.modifier") + (entry.setting.get() ? "-disable" : "");
+                            Groups.player.each(pl ->
+                                pl.sendMessage(
+                                    Strings.format(
+                                        dynamicLocale(pl).get(string),
+                                        p.coloredName(), dynamicLocale(pl).get(entry.local + ".name"), votes(), votesRequired()
+                                    )
+                                )
+                            );
+                        };
+                        onTime = () -> Groups.player.each(pl ->
+                            pl.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(pl).get("vote.extremity-time.modifier"),
+                                    time
+                                )
+                            )
+                        );
+                        onFailure = () -> Groups.player.each(pl ->
+                            pl.sendMessage(
+                                dynamicLocale(pl).get("vote.extremity-fail.modifier")
+                            )
+                        );
+                        onSuccess = () -> {
+                            Groups.player.each(pl ->
+                                pl.sendMessage(
+                                    Strings.format(
+                                        dynamicLocale(pl).get(entry.setting.get() ? "vote.extremity-success.modifier-disable" : "vote.extremity-success.modifier-enable"),
+                                        dynamicLocale(pl).get(entry.local + ".name")
+                                    )
+                                )
+                            );
+
+                            Core.settings.put(entry.local.replaceAll("setting.", ""), !entry.setting.get());
+                            SettingCache.fetch();
+                        };
+                    }};
+                    return;
+                }
+
+                int res = switch(args[0].toLowerCase()){
+                    case "c", "cancel" -> -1;
+                    case "n", "no" -> 0;
+                    case "y", "yes" -> 1;
+                    case "f", "force" -> 2;
+                    default -> -2;
+                };
+
+                if(res <= -2){
+                    player.sendMessage(dynamicLocale(player).get("vote.extremity-invalid.modifier"));
+                    return;
+                }
+
+                if(res == -1){
+                    if(modi.initiator == player || player.admin){
+                        String key = player.admin ? "vote.extremity-cancelled-admin" : "vote.extremity-cancelled";
+                        Groups.player.each(p ->
+                            Call.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(p).get(key),
+                                    player.coloredName()
+                                )
+                            )
+                        );
+
+                        modi.quit();
+                    }else player.sendMessage(dynamicLocale(player).get("cmd.extremity-insufficient"));
+
+                    return;
+                }
+
+                if(res == 2){
+                    if(player.admin){
+                        Groups.player.each(p ->
+                            Call.sendMessage(
+                                Strings.format(
+                                    dynamicLocale(p).get("vote.extremity-skip"),
+                                    player.coloredName()
+                                )
+                            )
+                        );
+
+                        modi.success();
+                    }else player.sendMessage(dynamicLocale(player).get("cmd.extremity-insufficient"));
+
+                    return;
+                }
+
+                modi.vote(player, res == 1);
             });
             netServer.clientCommands.<Player>register("unitdex", "[unitdex]", "Allows admins to edit the unitdex ingame", (args, player) -> {
                 if(!player.admin){
-                    player.sendMessage("[accent][Extremity] [scarlet]Missing necessary privileges!");
+                    player.sendMessage(dynamicLocale(player).get("cmd.extremity-insufficient"));
                     return;
                 }
 
@@ -154,7 +322,7 @@ public class Extremity extends Mod{
                     dex.setLength(0);
                     Manager.reload();
 
-                    player.sendMessage("[accent][Extremity] Reset unitdex to default values!");
+                    player.sendMessage(dynamicLocale(player).get("cmd.extremity-reset"));
                     return;
                 }
 
@@ -162,20 +330,22 @@ public class Extremity extends Mod{
                     Manager.loadRaw(dex.toString(), "dex");
                     dex.setLength(0);
 
-                    player.sendMessage("[accent][Extremity] Submitted new unitdex!");
+                    player.sendMessage(dynamicLocale(player).get("cmd.extremity-submitted"));
                     return;
                 }
 
                 dex.append(args[0]);
-                player.sendMessage("[accent][Extremity] Saved unitdex data in cache\nType [accent]/unitdex submit[] to apply when ready!");
+                player.sendMessage(dynamicLocale(player).get("cmd.extremity-ready"));
             });
         });
     }
 
     public void fetchVersion(){
         var mod = mods.list().find(m -> m.main.equals(this));
-        if(mod != null && mod.meta != null)
+        if(mod != null && mod.meta != null){
+            DedicatedBundles.init(mod);
             Manager.modVersion = mod.meta.version;
+        }
 
         if(Manager.modVersion == null){
             Log.infoTag("Extremity","Failed to fetch the version.");
@@ -188,13 +358,13 @@ public class Extremity extends Mod{
         handler.register("difficulty","[int]",  "Sets the difficulty scale that Extremity will use", i -> {
             if(i.length >= 1){
                 SettingCache.difficulty = Mathf.clamp(Strings.parseInt(i[0], 3), 0, highestScale);
-                Log.info(Strings.format("Set difficulty scale to @", SettingCache.difficulty));
-            }else Log.info(Strings.format("Current difficulty scale is @", SettingCache.difficulty));
+                Log.info(Strings.format(Core.bundle.get("con.extremity-difficulty-set"), SettingCache.difficulty));
+            }else Log.info(Strings.format(Core.bundle.get("con.extremity-difficulty"), SettingCache.difficulty));
         });
         handler.register("unitdex", "[dex]", "Sets or prints the current unitdex", i -> {
             if(i.length >= 1){
                 Manager.loadRaw(i[0], "dex");
-                Log.info("Applied new unitdex");
+                Log.info(Core.bundle.get("con.extremity-applied"));
             }else Log.info(Manager.packDex());
         });
         handler.register("resetdex", "Re-runs the indexing task to restore default configs", i -> Manager.reload());

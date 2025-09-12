@@ -1,7 +1,9 @@
 package extremity;
 
 import arc.*;
-import arc.util.Log;
+import arc.func.*;
+import arc.struct.*;
+import arc.util.*;
 import mindustry.gen.*;
 
 import java.nio.*;
@@ -103,5 +105,29 @@ public class SettingCache{
 
         ui.showInfoFade(Core.bundle.get("extremity-success"), 3f);
         Call.serverPacketReliable("extremity-confirm", modVersion);
+    }
+
+    public enum List{
+        damageTurrets("setting.extremity-pvp", () -> SettingCache.damageTurrets),
+        fastEnemies("setting.extremity-enemies", () -> SettingCache.fastEnemies),
+        slowAllies("setting.extremity-allies", () -> SettingCache.slowAllies),
+        turrerExplosions("setting.extremity-explosions", () -> SettingCache.turretExplosions),
+        killCores("setting.extremity-cores", () -> SettingCache.killCores),
+        affectBuildings("setting.extremity-buildings", () -> SettingCache.affectBuildings),
+        weatherEffects("setting.extremity-weather", () -> SettingCache.weatherEffects),
+        manageBullets("setting.extremity-bullets", () -> SettingCache.manageBullets),
+        extendedZones("setting.extremity-zones", () -> SettingCache.extendedZones),
+        guardianShielding("setting.extremity-guardian", () -> SettingCache.guardianShielding);
+
+        public final String local;
+        public final Boolp setting;
+
+        List(String loc, Boolp set){
+            this.local = loc;
+            this.setting = set;
+        }
+
+        public static final Seq<List> all = Seq.with(values());
+        public static final int pages = (all.size / 5) + (all.size % 5 == 0 ? 0 : 1);
     }
 }
