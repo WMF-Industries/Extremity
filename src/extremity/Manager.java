@@ -223,9 +223,15 @@ public class Manager{
         universe.clearLoadoutInfo();
 
         // clears the tech tree
-        for(var node : planet.techTree.children){
+        Seq<TechTree.TechNode> nodes = Seq.with(planet.techTree.children);
+        while(nodes.size > 0){
+            var node = nodes.first();
+            nodes.remove(0);
+
             node.reset();
             node.content.clearUnlock();
+
+            nodes.add(node.children);
         }
     }
 
@@ -560,7 +566,7 @@ public class Manager{
     }
 
     private static void sync(Player player){
-        if(!state.isGame()) return;
+        if(!state.isGame() || player.con == null) return;
 
         Call.clientBinaryPacketReliable(player.con, "extremity-config", writeBuffer.array());
     }
