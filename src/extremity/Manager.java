@@ -38,7 +38,7 @@ public class Manager{
     private static Seq<UnitType> units = new Seq<>();
     private final static Seq<Tile> areas = new Seq<>();
     private static Seq<StatusEffect> effectCache = new Seq<>();
-    private final static ObjectFloatMap<StatusEffect> effects = new ObjectFloatMap<>();
+    private final static Seq<StatusEntry> effects = new Seq<>(false);
 
     final static Interval intervals = new Interval(1);
     final static Seq<Player> players = new Seq<>(false);
@@ -165,13 +165,17 @@ public class Manager{
             if(units.isEmpty()) return;
 
             effects.clear();
-            for(int i = 0; i < effectCache.size; i++)
-                if(e.unit.hasEffect(effectCache.get(i)))
-                    effects.put(effectCache.get(i), e.unit.getDuration(effectCache.get(i)));
+
+            float duration;
+            for(int i = 0; i < effectCache.size; i++){
+                duration = e.unit.getDuration(effectCache.get(i));
+                if(duration > 0f)
+                    effects.add(new StatusEntry(effectCache.get(i), duration));
+            }
 
             units.each(type -> {
                 areas.clear();
-                tile.circle((int)((e.unit.hitSize + 16f) / tilesize), var -> {
+                tile.circle((int) ((e.unit.hitSize + 16f) / tilesize), var -> {
                     if(var != null && (!var.solid() || type.flying) && (var.floor().isLiquid || !type.naval))
                         areas.add(var);
                 });
@@ -184,7 +188,7 @@ public class Manager{
 
                     Unit u = type.spawn(e.unit.team, tmp.getX() + Mathf.random(-0.2f, 0.2f), tmp.getY() + Mathf.random(-0.2f, 0.2f));
                     u.rotation(e.unit.rotation);
-                    effects.each(entry -> u.apply(entry.key, entry.value));
+                    effects.each(entry -> u.apply(entry.effect, entry.duration));
                 }
             });
         });
@@ -267,40 +271,39 @@ public class Manager{
         if(++schedule >= fixedRate)
             fixedUpdate();
 
-        if((!weatherEffects || !affectBuildings) && (!damageTurrets || !state.rules.pvp))
-            return;
+        if(damageTurrets || (weatherEffects && affectBuildings)){
+            Groups.build.each(b -> {
+                if(b instanceof ForceProjector.ForceBuild build){
+                    b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
+                        if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
+                            covered[tx + ty * world.width()] = true;
+                    });
+                }
+            });
 
-        Groups.build.each(b -> {
-            if(b instanceof ForceProjector.ForceBuild build){
-                b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
-                    if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
-                        covered[tx + ty * world.width()] = true;
-                });
-            }
-        });
+            world.tiles.eachTile(t -> {
+                if(t.build == null || (!hasPlayers(t.team()) && !state.rules.pvp)) return;
 
-        world.tiles.eachTile(t -> {
-            if(t.build == null || (!hasPlayers(t.team()) && !state.rules.pvp)) return;
+                if(affectBuildings){
+                    if(weathers[1])
+                        t.build.applySlowdown(0.35f, 2f);
+                    if(weathers[2] && t.build.block instanceof Conveyor)
+                        t.build.applySlowdown(0.5f, 2f);
+                }
 
-            if(affectBuildings){
-                if(weathers[1])
-                    t.build.applySlowdown(0.35f, 2f);
-                if(weathers[2] && t.build.block instanceof Conveyor)
-                    t.build.applySlowdown(0.5f, 2f);
-            }
+                if(state.rules.pvp) return;
 
-            if(state.rules.pvp) return;
+                damage = 0;
+                if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
+                    damage += 0.0083f * scaledRand();
+                if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
+                    damage += heat * scaledRand();
 
-            damage = 0;
-            if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
-                damage += 0.0083f * scaledRand();
-            if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
-                damage += heat * scaledRand();
-
-            if(damage > 0)
-                t.build.damageContinuous(damage);
-            covered[t.array()] = false;
-        });
+                if(damage > 0)
+                    t.build.damageContinuous(damage);
+                covered[t.array()] = false;
+            });
+        }
     }
 
     private static void fixedUpdate(){
@@ -407,7 +410,7 @@ public class Manager{
     }
 
     private static boolean validUnit(Unit u){
-        return u != null && (hasPlayers(u.team) || state.rules.pvp) && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
+        return u != null && !u.spawnedByCore() && (hasPlayers(u.team) || state.rules.pvp) && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
     }
 
     private static int unitRand(){
@@ -569,5 +572,15 @@ public class Manager{
         if(!state.isGame() || player.con == null) return;
 
         Call.clientBinaryPacketReliable(player.con, "extremity-config", writeBuffer.array());
+    }
+
+    private static class StatusEntry{
+        final StatusEffect effect;
+        final float duration;
+
+        StatusEntry(StatusEffect effect, float duration){
+            this.effect = effect;
+            this.duration = duration;
+        }
     }
 }
