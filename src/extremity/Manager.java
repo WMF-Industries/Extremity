@@ -40,7 +40,7 @@ public class Manager{
     private static Seq<StatusEffect> effectCache = new Seq<>();
     private final static Seq<StatusEntry> effects = new Seq<>(false);
 
-    final static Interval intervals = new Interval(1);
+    final static Interval intervals = new Interval(2);
     final static Seq<Player> players = new Seq<>(false);
 
     static boolean[] covered;
@@ -327,7 +327,8 @@ public class Manager{
                                 state.rules.attackMode = false;
                                 planet.campaignRules.apply(planet, state.rules);
 
-                                if(net.server()) Call.setRules(state.rules);
+                                if(net.server())
+                                    Call.setRules(state.rules);
                             }else{
                                 sector.info.winWave = waveMax;
                                 sector.info.waves = true;
@@ -352,6 +353,14 @@ public class Manager{
                 else if(state.weather == Weathers.sandstorm)
                     weathers[2] = true;
             });
+        }
+
+        if(headless && active && intervals.get(1, 108000)){
+            Groups.player.each(p ->
+                p.sendMessage(
+                    dynamicLocale(p).get(difficulty > 0 ? "net.extremity-active" : "net.extremity-modifiers")
+                )
+            );
         }
     }
 

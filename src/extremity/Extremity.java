@@ -188,7 +188,7 @@ public class Extremity extends Mod{
                 StringBuilder sb = new StringBuilder();
 
                 I18NBundle locale = dynamicLocale(player);
-                sb.append(locale.get("list.extremity-modifiers-begin"));
+                sb.append(locale.get("list.extremity-modifiers.begin"));
                 for(int i = offset; i < offset + 5; i++){
                     SettingCache.List entry = SettingCache.List.all.get(i);
 
@@ -197,7 +197,7 @@ public class Extremity extends Mod{
                     String desc = locale.get(entry.local + ".description").replaceAll("\n", "\n  [slate][?]:[] ");
                     sb.append("\n  [slate][?]:[] ").append(desc).append("\n");
                 }
-                sb.append(Strings.format(locale.get("list.extremity-modifiers-end"), page, SettingCache.List.pages));
+                sb.append(Strings.format(locale.get("list.extremity-modifiers.end"), page, SettingCache.List.pages));
 
                 player.sendMessage(sb.toString());
             });
