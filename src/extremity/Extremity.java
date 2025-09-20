@@ -341,12 +341,14 @@ public class Extremity extends Mod{
     }
 
     public void fetchVersion(){
-        var mod = mods.list().find(m -> m.main.equals(this));
-        if(mod != null && mod.meta != null){
-            DedicatedBundles.init(mod);
-            Manager.modVersion = mod.meta.version;
+        var self = mods.getMod(getClass());
+        if(self != null && self.meta != null){
+            DedicatedBundles.init(self);
+            Manager.modVersion = self.meta.version;
         }
 
+        // if it cannot find its own class, something is seriously wrong...
+        // though crashing / quitting would be quite over the top, so just log and ignore
         if(Manager.modVersion == null){
             Log.infoTag("Extremity","Failed to fetch the version.");
             Manager.modVersion = "err";
