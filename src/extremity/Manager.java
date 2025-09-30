@@ -31,7 +31,7 @@ public class Manager{
     public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
 
     static boolean host = false;
-    static String modVersion;
+    static String modVersion, internalName = "";
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
 
@@ -45,9 +45,11 @@ public class Manager{
 
     static boolean[] covered;
     static boolean[] weathers = new boolean[3];
+    static Seq<Building> cores = new Seq<>();
     static Item type;
     static int ammo, schedule;
     static float heat, req, time, damage;
+    static double lastTick;
 
     static void setup(){
         Events.run(EventType.Trigger.update, Manager::update);
@@ -102,21 +104,21 @@ public class Manager{
                 return;
             }
 
-            if(killCores && e.tile.block() instanceof CoreBlock)
-                e.tile.team().cores().copy().each(Building::kill);
+            if(killCores && cores.isEmpty() && e.tile.block() instanceof CoreBlock){
+                cores.addAll(e.tile.team().cores()).each(Building::kill);
+                cores.clear();
+            }
         });
 
         Events.on(EventType.WaveEvent.class, e -> {
             if(!extendedZones || difficulty < 1) return;
 
-            Seq<Building> builds = new Seq<>();
-            spawner.getSpawns().each(t -> {
+            spawner.getSpawns().each(t ->
                 t.circle((int) ((state.rules.dropZoneRadius + 16f) * 1.05f) / tilesize, tmp -> {
                     if(tmp.build != null)
-                        builds.addUnique(tmp.build);
-                });
-            });
-            builds.each(b -> b.damage(b.maxHealth / Math.max(0.1f, (4f / difficulty))));
+                        tmp.build.damage(tmp.build.maxHealth / Math.max(0.1f, (4f / difficulty)));
+                })
+            );
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
@@ -136,8 +138,22 @@ public class Manager{
                 fetch();
                 if(!headless && active)
                     ui.chatfrag.addMessage(Core.bundle.get("extremity-welcome"));
+
+                Core.app.post(() -> {
+                    resetTemp();
+                    if(state.rules.tags.containsKey("extremity-mapdex")){
+                        if(headless || state.tick > 0){
+                            loadTemp();
+                            return;
+                        }
+
+                        ui.showConfirm(Core.bundle.get("map.extremity-unitdex"), Manager::loadTemp);
+                    }
+                });
             }
         });
+
+        Events.on(EventType.ResetEvent.class, e -> resetTemp());
 
         Events.on(EventType.PlayerJoin.class, e -> {
             if(host){
@@ -259,8 +275,10 @@ public class Manager{
                     if(!state.rules.pvp && slowAllies)
                         u.apply(StatusEffects.slow, 300f);
 
-                    if(weatherEffects && validUnit(u))
-                        u.apply(StatusEffects.corroded, 180f);
+                    if(weatherEffects && (state.tick - lastTick) >= 60f && validUnit(u)){
+                        u.apply(StatusEffects.shocked);
+                        lastTick = state.tick;
+                    }
                 }
             });
         }
@@ -471,12 +489,6 @@ public class Manager{
 
         time = Time.elapsed();
 
-        // To add a custom unitdex, do Core.settings.put("extremity-unitdex-<your mod's internal name>", "<unitdex string>")
-        // Generate the unitdex string using the in-game unitdex editor, simply clear out all existing entries
-        // then create entries for the missing units, using the <unit> -> <spawns> scheme, and copy to clipboard
-        // Only one unitdex string will be processed per mod, so make sure to include all the units in it
-        // Additionally, make sure the Core.settings.put() is ran every time the mod's being loaded, best if in the mod's main class
-
         // Assembler for unitdexes stored as strings in the Core.settings
         Core.app.post(() -> {
             Log.infoTag("Extremity", "Fetching entries from other mods...");
@@ -484,7 +496,7 @@ public class Manager{
 
             Seq<UnitType> results = new Seq<>();
             mods.eachEnabled(m -> {
-                if(m.meta.internalName.equals("extremity")) return;
+                if(m.meta.internalName.equals(internalName)) return;
 
                 String data = Core.settings.getString("extremity-unitdex-" + m.meta.internalName, "");
                 if(!data.isEmpty()){
@@ -541,6 +553,8 @@ public class Manager{
     }
 
     public static void loadRaw(String data, String name){
+        boolean log = !name.isEmpty();
+
         if(!data.isEmpty()){
             Seq<UnitType> results = new Seq<>();
             spawns.clear();
@@ -549,7 +563,8 @@ public class Manager{
             for(String input : base){
                 String[] main = input.split("=");
                 if(main.length < 2){
-                    Log.infoTag("Extremity", Strings.format("Couldn't parse unitdex entry @ from @", input, name));
+                    if(log)
+                        Log.infoTag("Extremity", Strings.format("Couldn't parse unitdex entry @ from @", input, name));
                     continue;
                 }
 
@@ -559,16 +574,41 @@ public class Manager{
                 results.clear();
                 for(String var : secondary){
                     UnitType spawn = getUnit(var);
-                    if(spawn != null)
+                    if(spawn != null){
                         results.add(spawn);
-                    else Log.infoTag("Extremity", Strings.format("Couldn't find any unit for entry @", var));
+                        continue;
+                    }
+
+                    if(log)
+                        Log.infoTag("Extremity", Strings.format("Couldn't find any unit for entry @", var));
                 }
 
-                if(parent != null && !results.isEmpty())
+                if(parent != null && !results.isEmpty()){
                     spawns.put(parent, results.copy());
-                else Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
+                    continue;
+                }
+
+                if(log)
+                    Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
             }
-        }else Log.infoTag("Extremity", Strings.format("Save @ does not have any unitdex entries", name));
+
+            return;
+        }
+
+        if(log)
+            Log.infoTag("Extremity", Strings.format("Save @ does not have any unitdex entries", name));
+    }
+
+    public static void loadTemp(){
+        Core.settings.put("extremity-lastdex", packDex());
+        loadRaw(state.rules.tags.get("extremity-mapdex"), "Map Unitdex");
+    }
+
+    public static void resetTemp(){
+        if(Core.settings.has("extremity-lastdex")){
+            loadRaw(Core.settings.getString("extremity-lastdex"), "");
+            Core.settings.remove("extremity-lastdex");
+        }
     }
 
     public static void syncAll(){

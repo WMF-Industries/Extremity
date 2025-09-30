@@ -144,7 +144,7 @@ public class Extremity extends Mod{
 
                 if(res == -1){
                     if(diff.initiator == player || player.admin){
-                        String key = player.admin ? "vote.extremity-cancelled-admin" : "vote.extremity-cancelled";
+                        String key = player.admin ? "vote.extremity-cancelled-admin.difficulty" : "vote.extremity-cancelled.difficulty";
                         Groups.player.each(p ->
                             Call.sendMessage(
                                 Strings.format(
@@ -165,7 +165,7 @@ public class Extremity extends Mod{
                         Groups.player.each(p ->
                             Call.sendMessage(
                                 Strings.format(
-                                    dynamicLocale(p).get("vote.extremity-skip"),
+                                    dynamicLocale(p).get("vote.extremity-skip.difficulty"),
                                     player.coloredName()
                                 )
                             )
@@ -266,7 +266,7 @@ public class Extremity extends Mod{
 
                 if(res == -1){
                     if(modi.initiator == player || player.admin){
-                        String key = player.admin ? "vote.extremity-cancelled-admin" : "vote.extremity-cancelled";
+                        String key = player.admin ? "vote.extremity-cancelled-admin.modifier" : "vote.extremity-cancelled.modifier";
                         Groups.player.each(p ->
                             Call.sendMessage(
                                 Strings.format(
@@ -287,7 +287,7 @@ public class Extremity extends Mod{
                         Groups.player.each(p ->
                             Call.sendMessage(
                                 Strings.format(
-                                    dynamicLocale(p).get("vote.extremity-skip"),
+                                    dynamicLocale(p).get("vote.extremity-skip.modifier"),
                                     player.coloredName()
                                 )
                             )
@@ -345,6 +345,7 @@ public class Extremity extends Mod{
         if(self != null && self.meta != null){
             DedicatedBundles.init(self);
             Manager.modVersion = self.meta.version;
+            Manager.internalName = self.meta.internalName;
         }
 
         // if it cannot find its own class, something is seriously wrong...
