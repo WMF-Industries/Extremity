@@ -19,7 +19,7 @@ public class Extremity extends Mod{
         Manager.setup();
 
         Events.on(EventType.ClientLoadEvent.class, e -> {
-            fetchVersion();
+            finishLoading();
             UnitdexEditor.init();
 
             if(!Core.settings.getBool("extremity-init", false)){
@@ -27,6 +27,7 @@ public class Extremity extends Mod{
                 Core.settings.put("extremity-init", true);
             }
 
+            //TODO: this is an eyesore
             ui.settings.addCategory(Core.bundle.get("extremity-category"), Icon.book, t -> {
                 DynamicSettings.DynamicTable table = new DynamicSettings.DynamicTable();
 
@@ -54,6 +55,8 @@ public class Extremity extends Mod{
                     });
                 }, null);
                 table.checkPref("extremity-cores", false, s -> SettingCache.needsSync = true, null);
+                table.checkPref("extremity-taken", false, s -> SettingCache.needsSync = true, null);
+                table.checkPref("extremity-units", false, s -> SettingCache.needsSync = true, null);
                 table.confirmPref("extremity-weather", false, s -> {
                     SettingCache.needsSync = true;
                     table.rebuild("extremity-weather", s);
@@ -74,12 +77,17 @@ public class Extremity extends Mod{
         });
 
         Events.on(EventType.ServerLoadEvent.class, e -> {
-            fetchVersion();
+            finishLoading();
 
             StringBuilder dex = new StringBuilder();
             netServer.clientCommands.<Player>register("difficulty", "[difficulty/vote]", "Changes the Extremity difficulty scale (0-10), or prints the current difficulty to chat", (args, player) -> {
                 if(args.length < 1){
                     player.sendMessage(Strings.format(dynamicLocale(player).get("cmd.extremity-difficulty"), SettingCache.difficulty));
+                    return;
+                }
+
+                if(Manager.lockSettings){
+                    player.sendMessage(dynamicLocale(player).get("cmd.extremity-difficulty.locked"));
                     return;
                 }
 
@@ -202,6 +210,11 @@ public class Extremity extends Mod{
                 player.sendMessage(sb.toString());
             });
             netServer.clientCommands.<Player>register("modifier", "<id/vote>", "Starts a vote to change the modifier state", (args, player) -> {
+                if(Manager.lockSettings){
+                    player.sendMessage(dynamicLocale(player).get("cmd.extremity-modifier.locked"));
+                    return;
+                }
+
                 if(modi == null || modi.completed){
                     if(!Strings.canParsePositiveInt(args[0]) || Strings.parseInt(args[0]) > SettingCache.List.all.size){
                         player.sendMessage(dynamicLocale(player).get("vote.extremity-invalid.modifier"));
@@ -340,20 +353,17 @@ public class Extremity extends Mod{
         });
     }
 
-    public void fetchVersion(){
+    public void finishLoading(){
         var self = mods.getMod(getClass());
         if(self != null && self.meta != null){
             DedicatedBundles.init(self);
-            Manager.modVersion = self.meta.version;
-            Manager.internalName = self.meta.internalName;
+            Manager.main = self;
         }
 
         // if it cannot find its own class, something is seriously wrong...
         // though crashing / quitting would be quite over the top, so just log and ignore
-        if(Manager.modVersion == null){
+        if(Manager.modVersion().equals("err"))
             Log.infoTag("Extremity","Failed to fetch the version.");
-            Manager.modVersion = "err";
-        }
     }
 
     @Override

@@ -26,12 +26,13 @@ import java.util.Arrays;
 import static extremity.utils.DedicatedBundles.*;
 import static mindustry.Vars.*;
 import static extremity.SettingCache.*;
+import static mindustry.mod.Mods.*;
 
 public class Manager{
     public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
 
-    static boolean host = false;
-    static String modVersion, internalName = "";
+    static boolean host = false, lockSettings = false;
+    static LoadedMod main;
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
 
@@ -54,27 +55,19 @@ public class Manager{
     static void setup(){
         Events.run(EventType.Trigger.update, Manager::update);
 
-        // startup task that creates a map of unit spawns, *should* be compatible with most mods
-        Events.on(EventType.ContentInitEvent.class, e -> {
-            reload();
-
-            effectCache = content.statusEffects();
-            Log.infoTag("Extremity","Pain has been fully loaded...");
-        });
-
         Core.app.post(() -> {
             netServer.addBinaryPacketHandler("extremity-syncreq", (player, content) -> sync(player));
             netServer.addPacketHandler("extremity-confirm", (player, version) -> {
                 if(players.addUnique(player)){
-                    if(!version.equals(modVersion))
-                        Call.clientPacketReliable(player.con, "extremity-error", modVersion);
+                    if(!version.equals(modVersion()))
+                        Call.clientPacketReliable(player.con, "extremity-error", modVersion());
 
-                    int ver = Strings.parseInt(modVersion.replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
+                    int ver = Strings.parseInt(modVersion().replaceAll("\\.", ""), -1), comp = Strings.parseInt(version.replaceAll("\\.", ""), -1);
                     if(ver < comp){
                         if(headless)
-                            Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", modVersion, version));
+                            Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", modVersion(), version));
                         else
-                            ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), modVersion, version));
+                            ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), modVersion(), version));
                     }
                 }
             });
@@ -82,9 +75,20 @@ public class Manager{
             if(headless) return;
 
             netClient.addPacketHandler("extremity-error", ver ->
-                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), modVersion, ver), 10f)
+                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), modVersion(), ver), 10f)
             );
             netClient.addBinaryPacketHandler("extremity-config", SettingCache::apply);
+        });
+
+        Events.on(EventType.ContentInitEvent.class, e -> {
+            // wait a tick for mods that may be doing some weird setup
+            Core.app.post(() -> {
+                // startup task that creates a map of unit spawns, *should* be compatible with most mods
+                reload();
+
+                effectCache = content.statusEffects();
+                Log.infoTag("Extremity","Pain has been fully loaded...");
+            });
         });
 
         Events.on(EventType.BlockDestroyEvent.class, e -> {
@@ -133,6 +137,7 @@ public class Manager{
             Arrays.fill(weathers, false);
             covered = new boolean[world.width() * world.height()];
 
+            lockSettings = false;
             host = net.server() || !net.active();
             if(host){
                 fetch();
@@ -207,6 +212,24 @@ public class Manager{
                     effects.each(entry -> u.apply(entry.effect, entry.duration));
                 }
             });
+        });
+
+        Events.on(EventType.BuildDamageEvent.class, e -> {
+            if(!noDamageTaken) return;
+
+            if(hasPlayers(e.build.team)){
+                cores.addAll(e.build.team.cores()).each(Building::kill);
+                cores.clear();
+            }
+        });
+
+        Events.on(EventType.UnitDamageEvent.class, e -> {
+            if(!noUnitDamage) return;
+
+            if(hasPlayers(e.unit.team)){
+                cores.addAll(e.unit.team.cores()).each(Building::kill);
+                cores.clear();
+            }
         });
 
         Events.on(EventType.SectorLoseEvent.class, e -> {
@@ -408,7 +431,7 @@ public class Manager{
     }
 
     private static boolean hasPlayers(Team team){
-        return !state.rules.pvp && ((!headless && team == player.team()) || team.data().players.size > 0);
+        return !state.rules.pvp && (team.id == state.rules.defaultTeam.id || team.data().players.size > 0);
     }
 
     private static boolean validTurret(Building b){ //TODO: this is terrible... replace with something better eventually
@@ -463,7 +486,7 @@ public class Manager{
         );
 
         // Simple unitdex auto-assembler, should pick up most units added by mods, unless they use a custom production method
-        // In such case, use the Core.settings based unitdex loading for said mod, documented below this assembler
+        // In such case, use the Core.settings based unitdex loading for said mod, documented in the README.md
         content.blocks().select(b -> b instanceof Reconstructor || b instanceof UnitAssembler).each(b -> {
             if(b instanceof Reconstructor r){
                 r.upgrades.each(u -> {
@@ -490,44 +513,44 @@ public class Manager{
         time = Time.elapsed();
 
         // Assembler for unitdexes stored as strings in the Core.settings
-        Core.app.post(() -> {
-            Log.infoTag("Extremity", "Fetching entries from other mods...");
-            Time.mark();
+        Log.infoTag("Extremity", "Fetching entries from other mods...");
+        Time.mark();
 
-            Seq<UnitType> results = new Seq<>();
-            mods.eachEnabled(m -> {
-                if(m.meta.internalName.equals(internalName)) return;
+        Seq<UnitType> results = new Seq<>();
+        mods.eachEnabled(m -> {
+            if(m.meta.internalName.equals(internalName())) return;
 
-                String data = Core.settings.getString("extremity-unitdex-" + m.meta.internalName, "");
-                if(!data.isEmpty()){
-                    String[] base = data.split(":");
-                    for(String input : base){
-                        String[] main = input.split("=");
-                        if(main.length < 2){
-                            Log.infoTag("Extremity", Strings.format("Couldn't parse unitdex entry @ from @", input, m.meta.displayName));
-                            continue;
-                        }
-
-                        UnitType parent = getUnit(main[0]);
-                        String[] secondary = main[1].split("&");
-
-                        results.clear();
-                        for(String var : secondary){
-                            UnitType spawn = getUnit(var);
-                            if(spawn != null)
-                                results.addUnique(spawn);
-                            else Log.infoTag("Extremity", Strings.format("Couldn't find any unit for entry @", var));
-                        }
-
-                        if(parent != null && !results.isEmpty())
-                            spawns.put(parent, results.copy());
-                        else Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
+            String data = Core.settings.getString("extremity-unitdex-" + m.meta.internalName, "");
+            if(!data.isEmpty()){
+                String[] base = data.split(":");
+                for(String input : base){
+                    String[] main = input.split("=");
+                    if(main.length < 2){
+                        Log.infoTag("Extremity", Strings.format("Couldn't parse unitdex entry @ from @", input, m.meta.displayName));
+                        continue;
                     }
-                }else Log.infoTag("Extremity", Strings.format("Mod @ does not have any custom unitdex entries", m.meta.displayName));
-            });
 
-            Log.infoTag("Extremity", Strings.format("Created @ entries in @ms!", spawns.size, Math.round(time + Time.elapsed())));
+                    UnitType parent = getUnit(main[0]);
+                    String[] secondary = main[1].split("&");
+
+                    results.clear();
+                    for(String var : secondary){
+                        UnitType spawn = getUnit(var);
+                        if(spawn != null)
+                            results.addUnique(spawn);
+                        else Log.infoTag("Extremity", Strings.format("Couldn't find any unit for entry @", var));
+                    }
+
+                    if(parent != null && !results.isEmpty())
+                        spawns.put(parent, results.copy());
+                    else
+                        Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
+                }
+            }else
+                Log.infoTag("Extremity", Strings.format("Mod @ does not have any custom unitdex entries", m.meta.displayName));
         });
+
+        Log.infoTag("Extremity", Strings.format("Created @ entries in @ms!", spawns.size, Math.round(time + Time.elapsed())));
     }
 
     public static String packDex(){
@@ -621,6 +644,14 @@ public class Manager{
         if(!state.isGame() || player.con == null) return;
 
         Call.clientBinaryPacketReliable(player.con, "extremity-config", writeBuffer.array());
+    }
+
+    public static String modVersion(){
+        return main != null ? main.meta.version : "err";
+    }
+
+    public static String internalName(){
+        return main != null ? main.meta.internalName : "err";
     }
 
     private static class StatusEntry{

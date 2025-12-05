@@ -13,7 +13,7 @@ import static mindustry.Vars.*;
 
 public class SettingCache{
     public static int difficulty;
-    public static boolean resetCampaign, allowPvp, fastEnemies, slowAllies, damageTurrets, turretExplosions, killCores, affectBuildings, damageBuildings, weatherEffects, manageBullets, extraInvasions, extendedZones, guardianShielding;
+    public static boolean resetCampaign, allowPvp, fastEnemies, slowAllies, damageTurrets, turretExplosions, killCores, affectBuildings, damageBuildings, weatherEffects, manageBullets, extraInvasions, extendedZones, guardianShielding, noDamageTaken, noUnitDamage;
 
     public static boolean needsSync, active;
 
@@ -40,7 +40,9 @@ public class SettingCache{
             manageBullets = Core.settings.getBool("extremity-bullets", false),
             extraInvasions = Core.settings.getBool("extremity-invasions", false),
             extendedZones = Core.settings.getBool("extremity-zones", false),
-            guardianShielding = Core.settings.getBool("extremity-guardian", false)
+            guardianShielding = Core.settings.getBool("extremity-guardian", false),
+            noDamageTaken = Core.settings.getBool("extremity-taken", false),
+            noUnitDamage = Core.settings.getBool("extremity-units", false)
         );
         writeBuffer.put((byte) difficulty);
 
@@ -50,15 +52,18 @@ public class SettingCache{
         needsSync = false;
     }
 
+    // this only scales to 64 boolean settings, but that's more than i'll ever add so that's alright
     public static void pack(boolean... args){
-        int packed = 0, bytes = 1 + Math.min(3, args.length / 8);
-        if(bytes == 3)
-            ++bytes;
+        long packed = 0;
+
+        int bytes = 1 + (args.length / 8);
+        if(bytes % 2 != 0)
+            bytes = bytes > 4 ? 8 : 4;
 
         byte packSize = (byte) bytes++;
         for(int i = 0; i < args.length; i++)
             if(args[i])
-                packed |= 1 << i;
+                packed |= 1L << i;
 
         active = packed > 0;
         writeBuffer = ByteBuffer.allocate(extraBytes + bytes);
@@ -67,44 +72,48 @@ public class SettingCache{
         switch(packSize){
             case 1 -> writeBuffer.put((byte) packed);
             case 2 -> writeBuffer.putShort((short) packed);
-            default -> writeBuffer.putInt(packed);
+            case 3, 4 -> writeBuffer.putInt((int) packed);
+            default -> writeBuffer.putLong(packed);
         }
     }
 
-    public static void unpack(boolean... args){
-        int val = switch(readBuffer.get()){
+    public static void unpack(Boolc... args){
+        long val = switch(readBuffer.get()){
             case 1 -> readBuffer.get();
             case 2 -> readBuffer.getShort();
-            default -> readBuffer.getInt();
+            case 3, 4 -> readBuffer.getInt();
+            default -> readBuffer.getLong();
         };
 
         for(int i = 0; i < args.length; i++)
-            args[i] = (val & (1 << i)) != 0;
+            args[i].get((val & (1L << i)) != 0);
     }
 
     public static void apply(byte[] data){
         readBuffer = ByteBuffer.wrap(data);
 
         unpack(
-            allowPvp,
-            damageTurrets,
-            fastEnemies,
-            slowAllies,
-            resetCampaign,
-            turretExplosions,
-            killCores,
-            affectBuildings,
-            damageBuildings,
-            weatherEffects,
-            manageBullets,
-            extraInvasions,
-            extendedZones,
-            guardianShielding
+            b -> allowPvp = b,
+            b -> damageTurrets = b,
+            b -> fastEnemies = b,
+            b -> slowAllies = b,
+            b -> resetCampaign = b,
+            b -> turretExplosions = b,
+            b -> killCores = b,
+            b -> affectBuildings = b,
+            b -> damageBuildings = b,
+            b -> weatherEffects = b,
+            b -> manageBullets = b,
+            b -> extraInvasions = b,
+            b -> extendedZones = b,
+            b -> guardianShielding = b,
+            b -> noDamageTaken = b,
+            b -> noUnitDamage = b
         );
         difficulty = readBuffer.get();
 
         ui.showInfoFade(Core.bundle.get("extremity-success"), 3f);
-        Call.serverPacketReliable("extremity-confirm", modVersion);
+        Call.serverPacketReliable("extremity-confirm", modVersion());
     }
 
     public enum List{
@@ -113,11 +122,13 @@ public class SettingCache{
         slowAllies("setting.extremity-allies", () -> SettingCache.slowAllies),
         turrerExplosions("setting.extremity-explosions", () -> SettingCache.turretExplosions),
         killCores("setting.extremity-cores", () -> SettingCache.killCores),
-        affectBuildings("setting.extremity-buildings", () -> SettingCache.affectBuildings),
         weatherEffects("setting.extremity-weather", () -> SettingCache.weatherEffects),
+        affectBuildings("setting.extremity-buildings", () -> SettingCache.affectBuildings),
         manageBullets("setting.extremity-bullets", () -> SettingCache.manageBullets),
         extendedZones("setting.extremity-zones", () -> SettingCache.extendedZones),
-        guardianShielding("setting.extremity-guardian", () -> SettingCache.guardianShielding);
+        guardianShielding("setting.extremity-guardian", () -> SettingCache.guardianShielding),
+        noDamage("setting.extremity-taken", () -> SettingCache.noDamageTaken),
+        noUnitDamage("setting.extremity-units", () -> SettingCache.noUnitDamage);
 
         public final String local;
         public final Boolp setting;

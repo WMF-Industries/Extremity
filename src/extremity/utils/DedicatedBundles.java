@@ -8,59 +8,49 @@ import arc.util.io.*;
 import mindustry.gen.*;
 import mindustry.mod.*;
 
+import java.util.*;
+
+// bundles are light enough, preload all of them
 public class DedicatedBundles{
-    public static ObjectMap<String, Fi> bundles = new ObjectMap<>();
-    public static ObjectSet<String> locales = new ObjectSet<>();
+    public static final String srcDir = "bundles";
+    public static ObjectMap<String, I18NBundle> bundles = new ObjectMap<>();
 
     public static void init(Mods.LoadedMod self){
-        if(self == null){
-            Log.warn("Failed to load DedicatedBundles util");
+        self.root.child(srcDir).walk(fi -> {
+            if(!fi.nameWithoutExtension().equals("bundle"))
+                generate(fi);
+        });
+
+        Log.info("Successfully loaded " + bundles.size + " additional Extremity bundles");
+    }
+
+    public static void generate(Fi bundle){
+        String locale = bundle.nameWithoutExtension().replaceFirst("bundle_", "");
+
+        Locale loc;
+        if(locale.contains("_")){
+            String[] split = locale.split("_");
+            loc = new Locale(split[0], split[1]);
+        }else loc = new Locale(locale);
+
+        I18NBundle gen = I18NBundle.createEmptyBundle();
+        Reflect.set(gen, "parent", Core.bundle);
+        Reflect.set(gen, "locale", loc);
+        Reflect.set(gen, "formatter", new TextFormatter(loc, true));
+
+        try{
+            PropertiesUtils.load(gen.getProperties(), bundle.reader());
+        }catch(Throwable e){
+            Log.err("Error loading bundle: " + bundle + "/" + locale, e);
             return;
         }
 
-        Fi folder = self.root.child("bundles");
-        if(folder.exists()){
-            for(Fi file : folder.list()){
-                if(file.name().startsWith("bundle") && file.extension().equals("properties")){
-                    String name = file.nameWithoutExtension();
-                    addLocale(name);
-                    bundles.put(name, file);
-                }
-            }
-        }
-    }
-
-    public static void addLocale(String name){
-        locales.add(
-            name.replace("bundle", "").replaceFirst("_", "")
-        );
+        bundles.put(locale, gen);
     }
 
     public static I18NBundle dynamicLocale(Player player){
-        if(player == null){
-            Log.warn("Invalid player object");
+        if(player == null)
             return Core.bundle;
-        }
-
-        String loc = locales.contains(player.locale) ? "_" + player.locale : "";
-        Fi bundle = bundles.get("bundle" + loc);
-
-        // this shouldn't be possible, but i'll keep the code here just in case
-        if(bundle == null){
-            Log.warn("Failed to find bundle (" + player.locale + ")");
-            return Core.bundle;
-        }
-
-        I18NBundle dynamic = I18NBundle.createEmptyBundle();
-        Reflect.set(dynamic, "parent", Core.bundle);
-
-        try{
-            PropertiesUtils.load(dynamic.getProperties(), bundle.reader());
-        }catch(Throwable e){
-            Log.err("Error loading bundle: " + bundle + "/" + player.locale, e);
-            dynamic = Core.bundle;
-        }
-
-        return dynamic;
+        return bundles.get(player.locale(), Core.bundle);
     }
 }
