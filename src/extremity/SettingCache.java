@@ -139,6 +139,7 @@ public class SettingCache{
         }
 
         public static final Seq<List> all = Seq.with(values());
-        public static final int pages = (all.size / 5) + (all.size % 5 == 0 ? 0 : 1);
+        public static final int entries = all.size;
+        public static final int pages = (entries / 5) + (entries % 5 == 0 ? 0 : 1);
     }
 }

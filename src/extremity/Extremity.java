@@ -192,12 +192,12 @@ public class Extremity extends Mod{
                 if(args.length > 0)
                     page = Mathf.clamp(Strings.parseInt(args[0], 1), 1, SettingCache.List.pages);
 
-                int offset = 5 * (page - 1);
+                int offset = 5 * (page - 1), limit = Math.min(5, SettingCache.List.entries - offset);
                 StringBuilder sb = new StringBuilder();
 
                 I18NBundle locale = dynamicLocale(player);
                 sb.append(locale.get("list.extremity-modifiers.begin"));
-                for(int i = offset; i < offset + 5; i++){
+                for(int i = offset; i < offset + limit; i++){
                     SettingCache.List entry = SettingCache.List.all.get(i);
 
                     sb.append("\n[lightgray](id: ").append(i).append(") >[] ").append(entry.setting.get() ? "[lime]" : "[scarlet]").append(locale.get(entry.local + ".name")).append("[]");
