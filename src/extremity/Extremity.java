@@ -67,7 +67,6 @@ public class Extremity extends Mod{
                 }, () -> Core.settings.getBool("extremity-weather", false));
                 table.checkPref("extremity-damage", false, s -> SettingCache.needsSync = true, () -> Core.settings.getBool("extremity-buildings", false));
                 table.checkPref("extremity-bullets", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
-                table.checkPref("extremity-invasions", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.checkPref("extremity-zones", false, s -> SettingCache.needsSync = true, () -> Core.settings.getInt("extremity-difficulty") > 0);
                 table.sliderPref("extremity-rows", 1, 1, 3, s ->  s + "", null);
 

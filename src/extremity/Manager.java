@@ -350,40 +350,6 @@ public class Manager{
     private static void fixedUpdate(){
         schedule = 0;
 
-        if(extraInvasions && difficulty > 0 && state.isCampaign()){
-            Planet planet = state.getPlanet();
-            if(planet != null){
-                Seq<Sector> sectors = state.getPlanet().sectors;
-                if(!sectors.isEmpty()){
-                    int captured = sectors.count(Sector::isCaptured);
-                    if(captured > Math.max(2, 8 / difficulty)){
-                        float ratio = (float) captured / sectors.count(Sector::isAttacked), max = difficulty * 0.024f;
-                        if(ratio < max && canInvade()){
-                            Sector sector = sectors.select(Sector::isCaptured).random();
-                            int waveMax = Math.max(sector.info.winWave, sector.isBeingPlayed() ? state.wave : sector.info.wave + sector.info.wavesPassed) + Mathf.random(1, difficulty) * 5;
-
-                            if(sector.isBeingPlayed()){
-                                state.rules.winWave = waveMax;
-                                state.rules.waves = true;
-                                state.rules.attackMode = false;
-                                planet.campaignRules.apply(planet, state.rules);
-
-                                if(net.server())
-                                    Call.setRules(state.rules);
-                            }else{
-                                sector.info.winWave = waveMax;
-                                sector.info.waves = true;
-                                sector.info.attack = false;
-                                sector.saveInfo();
-                            }
-
-                            Events.fire(new EventType.SectorInvasionEvent(sector));
-                        }
-                    }
-                }
-            }
-        }
-
         if(weatherEffects){
             Arrays.fill(weathers, false);
             Groups.weather.each(state -> {
@@ -403,31 +369,6 @@ public class Manager{
                 )
             );
         }
-    }
-
-    private static boolean canInvade(){
-        float chance, period;
-
-        switch(difficulty){
-            case 3 -> {
-                chance = 0.000043f;
-                period = 14400f;
-            }
-            case 4 -> {
-                chance = 0.00005f;
-                period = 7200f;
-            }
-            case 5 -> {
-                chance = 0.00013f;
-                period = 5400f;
-            }
-            default -> {
-                chance = 0.0002f;
-                period = 1800f;
-            }
-        }
-
-        return Mathf.chance(chance) && intervals.get(period);
     }
 
     private static boolean hasPlayers(Team team){
