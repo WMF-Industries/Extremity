@@ -11,7 +11,7 @@ import static extremity.utils.DedicatedBundles.dynamicLocale;
 import static mindustry.Vars.state;
 
 public class VoteSession{
-    ObjectMap<String, Boolean> votes = new ObjectMap<>();
+    ObjectMap<String, Byte> votes = new ObjectMap<>();
     StringBuilder builder = new StringBuilder();
     Timer.Task manager;
     Cons2<Player, Boolean> onVote = (p, b) -> {};
@@ -68,7 +68,7 @@ public class VoteSession{
         }
 
         builder.setLength(0);
-        votes.put(player.uuid(), res);
+        votes.put(player.uuid(), (byte) (res ? 1 : -1));
 
         onVote.get(player, res);
         if(refreshState() && !initial)
@@ -96,22 +96,19 @@ public class VoteSession{
     }
 
     public int votes(){
-        Seq<String> keys = votes.keys().toSeq();
-
         int ratio = 0;
-        for(int i = 0; i < votes.size; i++){
-            for(int p = 0; p < Groups.player.size(); p++){
-                if(Groups.player.index(p).uuid().equals(keys.get(i))){
-                    ratio += votes.get(keys.get(i)) ? 1 : -1;
-                    break;
-                }
-            }
+        for(int i = 0; i < Groups.player.size(); i++){
+            Player p = Groups.player.index(i);
+            int vote = votes.get(p.uuid(), Byte.MIN_VALUE);
+
+            if(vote != Byte.MIN_VALUE)
+                ratio += vote;
         }
 
         return ratio;
     }
 
     public int votesRequired(){
-        return Mathf.ceil(Groups.player.size() * 0.65f);
+        return Mathf.ceil(Groups.player.size() * Core.settings.getFloat("extremity-ratio", 0.4f));
     }
 }

@@ -118,7 +118,7 @@ public class SettingCache{
         damageTurrets("setting.extremity-pvp", () -> SettingCache.damageTurrets),
         fastEnemies("setting.extremity-enemies", () -> SettingCache.fastEnemies),
         slowAllies("setting.extremity-allies", () -> SettingCache.slowAllies),
-        turrerExplosions("setting.extremity-explosions", () -> SettingCache.turretExplosions),
+        turretExplosions("setting.extremity-explosions", () -> SettingCache.turretExplosions),
         killCores("setting.extremity-cores", () -> SettingCache.killCores),
         weatherEffects("setting.extremity-weather", () -> SettingCache.weatherEffects),
         affectBuildings("setting.extremity-buildings", () -> SettingCache.affectBuildings),

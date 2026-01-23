@@ -81,7 +81,7 @@ public class Extremity extends Mod{
             StringBuilder dex = new StringBuilder();
             netServer.clientCommands.<Player>register("difficulty", "[difficulty/vote]", "Changes the Extremity difficulty scale (0-10), or prints the current difficulty to chat", (args, player) -> {
                 if(args.length < 1){
-                    player.sendMessage(Strings.format(dynamicLocale(player).get("cmd.extremity-difficulty"), SettingCache.difficulty));
+                    player.sendMessage(dynamicLocale(player).format("cmd.extremity-difficulty", SettingCache.difficulty));
                     return;
                 }
 
@@ -100,16 +100,19 @@ public class Extremity extends Mod{
                     diff = new VoteSession(player){{
                         onVote = (p, vote) -> Groups.player.each(pl ->
                             pl.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(pl).get(vote ? "vote.extremity-voted.difficulty" : "vote.extremity-voted-against.difficulty"),
-                                    p.coloredName(), votediff, votes(), votesRequired()
+                                dynamicLocale(pl).format(
+                                    vote ? "vote.extremity-voted.difficulty" : "vote.extremity-voted-against.difficulty",
+                                    p.coloredName(),
+                                    votediff,
+                                    votes(),
+                                    votesRequired()
                                 )
                             )
                         );
                         onTime = () -> Groups.player.each(pl ->
                             pl.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(pl).get("vote.extremity-time.difficulty"),
+                                dynamicLocale(pl).format(
+                                    "vote.extremity-time.difficulty",
                                     time
                                 )
                             )
@@ -122,8 +125,8 @@ public class Extremity extends Mod{
                         onSuccess = () -> {
                             Groups.player.each(pl ->
                                 pl.sendMessage(
-                                    Strings.format(
-                                        dynamicLocale(pl).get("vote.extremity-success.difficulty"),
+                                    dynamicLocale(pl).format(
+                                        "vote.extremity-success.difficulty",
                                         votediff
                                     )
                                 )
@@ -154,8 +157,8 @@ public class Extremity extends Mod{
                         String key = player.admin ? "vote.extremity-cancelled-admin.difficulty" : "vote.extremity-cancelled.difficulty";
                         Groups.player.each(p ->
                             Call.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(p).get(key),
+                                dynamicLocale(p).format(
+                                    key,
                                     player.coloredName()
                                 )
                             )
@@ -171,8 +174,8 @@ public class Extremity extends Mod{
                     if(player.admin){
                         Groups.player.each(p ->
                             Call.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(p).get("vote.extremity-skip.difficulty"),
+                                dynamicLocale(p).format(
+                                    "vote.extremity-skip.difficulty",
                                     player.coloredName()
                                 )
                             )
@@ -204,7 +207,7 @@ public class Extremity extends Mod{
                     String desc = locale.get(entry.local + ".description").replaceAll("\n", "\n  [slate][?]:[] ");
                     sb.append("\n  [slate][?]:[] ").append(desc).append("\n");
                 }
-                sb.append(Strings.format(locale.get("list.extremity-modifiers.end"), page, SettingCache.List.pages));
+                sb.append(locale.format("list.extremity-modifiers.end", page, SettingCache.List.pages));
 
                 player.sendMessage(sb.toString());
             });
@@ -226,17 +229,20 @@ public class Extremity extends Mod{
                             String string = (vote ? "vote.extremity-voted.modifier" : "vote.extremity-voted-against.modifier") + (entry.setting.get() ? "-disable" : "");
                             Groups.player.each(pl ->
                                 pl.sendMessage(
-                                    Strings.format(
-                                        dynamicLocale(pl).get(string),
-                                        p.coloredName(), dynamicLocale(pl).get(entry.local + ".name"), votes(), votesRequired()
+                                    dynamicLocale(pl).format(
+                                        string,
+                                        p.coloredName(),
+                                        dynamicLocale(pl).get(entry.local + ".name"),
+                                        votes(),
+                                        votesRequired()
                                     )
                                 )
                             );
                         };
                         onTime = () -> Groups.player.each(pl ->
                             pl.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(pl).get("vote.extremity-time.modifier"),
+                                dynamicLocale(pl).format(
+                                    "vote.extremity-time.modifier",
                                     time
                                 )
                             )
@@ -249,8 +255,8 @@ public class Extremity extends Mod{
                         onSuccess = () -> {
                             Groups.player.each(pl ->
                                 pl.sendMessage(
-                                    Strings.format(
-                                        dynamicLocale(pl).get(entry.setting.get() ? "vote.extremity-success.modifier-disable" : "vote.extremity-success.modifier-enable"),
+                                    dynamicLocale(pl).format(
+                                        entry.setting.get() ? "vote.extremity-success.modifier-disable" : "vote.extremity-success.modifier-enable",
                                         dynamicLocale(pl).get(entry.local + ".name")
                                     )
                                 )
@@ -281,8 +287,8 @@ public class Extremity extends Mod{
                         String key = player.admin ? "vote.extremity-cancelled-admin.modifier" : "vote.extremity-cancelled.modifier";
                         Groups.player.each(p ->
                             Call.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(p).get(key),
+                                dynamicLocale(p).format(
+                                    key,
                                     player.coloredName()
                                 )
                             )
@@ -298,8 +304,8 @@ public class Extremity extends Mod{
                     if(player.admin){
                         Groups.player.each(p ->
                             Call.sendMessage(
-                                Strings.format(
-                                    dynamicLocale(p).get("vote.extremity-skip.modifier"),
+                                dynamicLocale(p).format(
+                                    "vote.extremity-skip.modifier",
                                     player.coloredName()
                                 )
                             )
@@ -370,8 +376,12 @@ public class Extremity extends Mod{
         handler.register("difficulty","[int]",  "Sets the difficulty scale that Extremity will use", i -> {
             if(i.length >= 1){
                 SettingCache.difficulty = Mathf.clamp(Strings.parseInt(i[0], 3), 0, highestScale);
-                Log.info(Strings.format(Core.bundle.get("con.extremity-difficulty-set"), SettingCache.difficulty));
-            }else Log.info(Strings.format(Core.bundle.get("con.extremity-difficulty"), SettingCache.difficulty));
+                Log.info(Core.bundle.format("con.extremity-difficulty-set", SettingCache.difficulty));
+            }else Log.info(Core.bundle.format("con.extremity-difficulty", SettingCache.difficulty));
+        });
+        handler.register("voteratio", "<0-1 float>", "Sets the required vote ratio for Extremity vote sessions", i -> {
+            Core.settings.put("extremity-ratio", Strings.parseFloat(i[0], 0.4f));
+            Log.info(Core.bundle.format("set.extremity-ratio", Core.settings.getFloat("extremity-ratio", 0.4f)));
         });
         handler.register("unitdex", "[dex]", "Sets or prints the current unitdex", i -> {
             if(i.length >= 1){

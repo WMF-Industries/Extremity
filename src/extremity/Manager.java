@@ -44,7 +44,7 @@ public class Manager{
     final static Interval intervals = new Interval(2);
     final static Seq<Player> players = new Seq<>(false);
 
-    static boolean[] covered;
+    static Bits shielded;
     static boolean[] weathers = new boolean[3];
     static Seq<Building> cores = new Seq<>();
     static Item type;
@@ -67,7 +67,7 @@ public class Manager{
                         if(headless)
                             Log.warn(Strings.format("A player with newer version of Extremity has joined, consider updating to avoid issues! (Local: v@, Theirs: v@)", modVersion(), version));
                         else
-                            ui.chatfrag.addMessage(Strings.format(Core.bundle.get("extremity-outdated"), modVersion(), version));
+                            ui.chatfrag.addMessage(Core.bundle.format("extremity-outdated", modVersion(), version));
                     }
                 }
             });
@@ -75,7 +75,7 @@ public class Manager{
             if(headless) return;
 
             netClient.addPacketHandler("extremity-error", ver ->
-                ui.showInfoFade(Strings.format(Core.bundle.get("extremity-error"), modVersion(), ver), 10f)
+                ui.showInfoFade(Core.bundle.format("extremity-error", modVersion(), ver), 10f)
             );
             netClient.addBinaryPacketHandler("extremity-config", SettingCache::apply);
         });
@@ -135,7 +135,7 @@ public class Manager{
             }
 
             Arrays.fill(weathers, false);
-            covered = new boolean[world.width() * world.height()];
+            shielded = new Bits(world.width() * world.height());
 
             lockSettings = false;
             host = net.server() || !net.active();
@@ -312,16 +312,18 @@ public class Manager{
         if(++schedule >= fixedRate)
             fixedUpdate();
 
-        if(damageTurrets || (weatherEffects && affectBuildings)){
+        if(weatherEffects){
             Groups.build.each(b -> {
                 if(b instanceof ForceProjector.ForceBuild build){
                     b.tile.circle((int) (build.realRadius() / tilesize) + 1, (tx, ty) -> {
                         if(Intersector.isInsideHexagon(b.tileX(), b.tileY(), (build.realRadius() * 2) / tilesize, tx, ty))
-                            covered[tx + ty * world.width()] = true;
+                            shielded.set(tx + ty * world.width(), true);
                     });
                 }
             });
+        }
 
+        if(damageTurrets || (weatherEffects && affectBuildings)){
             world.tiles.eachTile(t -> {
                 if(t.build == null || (!hasPlayers(t.team()) && !state.rules.pvp)) return;
 
@@ -335,14 +337,14 @@ public class Manager{
                 if(state.rules.pvp) return;
 
                 damage = 0;
-                if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !covered[t.array()])
+                if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !shielded.get(t.array()))
                     damage += 0.0083f * scaledRand();
                 if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
                     damage += heat * scaledRand();
 
                 if(damage > 0)
                     t.build.damageContinuous(damage);
-                covered[t.array()] = false;
+                shielded.set(t.array(), false);
             });
         }
     }
@@ -401,7 +403,7 @@ public class Manager{
     }
 
     private static boolean validUnit(Unit u){
-        return u != null && !u.spawnedByCore() && (hasPlayers(u.team) || state.rules.pvp) && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(covered[u.tileX() + u.tileY() * world.width()] || u.shield > 0);
+        return u != null && !u.spawnedByCore() && (hasPlayers(u.team) || state.rules.pvp) && u.hasEffect(StatusEffects.wet) && u.tileOn() != null && !(shielded.get(u.tileX() + u.tileY() * world.width()) || u.shield > 0);
     }
 
     private static int unitRand(){
@@ -495,15 +497,23 @@ public class Manager{
     }
 
     public static String packDex(){
+        ObjectIntMap<UnitType> counts = new ObjectIntMap<>();
         StringBuilder builder = new StringBuilder();
 
         for(var entry : spawns){
+            counts.clear();
+
             builder.append(entry.key.isVanilla() ? entry.key.id : entry.key.name).append("=");
-            for(int i = 0; i < entry.value.size; i++){
-                builder.append(entry.value.get(i).isVanilla() ? entry.value.get(i).id : entry.value.get(i).name);
-                if(entry.value.size > 1 && i < (entry.value.size - 1))
-                    builder.append("&");
+            entry.value.each(counts::increment);
+
+            for(var counted : counts){
+                builder.append(counted.key.isVanilla() ? counted.key.id : counted.key.name);
+                if(counted.value > 1)
+                    builder.append("x").append(counted.value);
+                builder.append("&");
             }
+
+            builder.setLength(builder.length() - 1);
             builder.append(":");
         }
 
@@ -537,9 +547,13 @@ public class Manager{
 
                 results.clear();
                 for(String var : secondary){
-                    UnitType spawn = getUnit(var);
+                    String[] io = var.split("x");
+                    UnitType spawn = getUnit(io[0]);
+
                     if(spawn != null){
-                        results.add(spawn);
+                        int count = io.length > 1 ? Math.max(1, Strings.parseInt(io[1], 1)) : 1;
+                        for(int i = 0; i < count; i++)
+                            results.add(spawn);
                         continue;
                     }
 
