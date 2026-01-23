@@ -379,7 +379,7 @@ public class Extremity extends Mod{
                 Log.info(Core.bundle.format("con.extremity-difficulty-set", SettingCache.difficulty));
             }else Log.info(Core.bundle.format("con.extremity-difficulty", SettingCache.difficulty));
         });
-        handler.register("voteratio", "<0-1 float>", "Sets the required vote ratio for Extremity vote sessions", i -> {
+        handler.register("voteratio", "<0-1f>", "Sets the required vote ratio for Extremity vote sessions", i -> {
             Core.settings.put("extremity-ratio", Strings.parseFloat(i[0], 0.4f));
             Log.info(Core.bundle.format("set.extremity-ratio", Core.settings.getFloat("extremity-ratio", 0.4f)));
         });
