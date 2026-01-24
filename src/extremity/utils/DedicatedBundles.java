@@ -10,12 +10,19 @@ import mindustry.mod.*;
 
 import java.util.*;
 
+import static mindustry.Vars.*;
+
 // bundles are light enough, preload all of them
 public class DedicatedBundles{
     public static final String srcDir = "bundles";
     public static ObjectMap<String, I18NBundle> bundles = new ObjectMap<>();
 
     public static void init(Mods.LoadedMod self){
+        if(headless){
+            Reflect.set(Core.bundle, "locale", Locale.ENGLISH);
+            Reflect.set(Core.bundle, "formatter", new TextFormatter(Locale.ENGLISH, true));
+        }
+
         self.root.child(srcDir).walk(fi -> {
             if(!fi.nameWithoutExtension().equals("bundle"))
                 generate(fi);
