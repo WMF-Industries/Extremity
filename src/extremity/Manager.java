@@ -36,10 +36,7 @@ public class Manager{
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
 
-    private static Seq<UnitType> units = new Seq<>();
-    private final static Seq<Tile> areas = new Seq<>();
-    private static Seq<StatusEffect> effectCache = new Seq<>();
-    private final static Seq<StatusEntry> effects = new Seq<>(false);
+    private static StatusEffect[] effectCache;
 
     final static Interval intervals = new Interval(2);
     final static Seq<Player> players = new Seq<>(false);
@@ -49,7 +46,7 @@ public class Manager{
     static Seq<Building> cores = new Seq<>();
     static Item type;
     static int ammo, schedule;
-    static float heat, req, time, damage;
+    static float heat, req;
     static double lastTick;
 
     static void setup(){
@@ -86,7 +83,7 @@ public class Manager{
                 // startup task that creates a map of unit spawns, *should* be compatible with most mods
                 reload();
 
-                effectCache = content.statusEffects();
+                effectCache = content.statusEffects().toArray(StatusEffect.class);
                 Log.infoTag("Extremity","Pain has been fully loaded...");
             });
         });
@@ -126,9 +123,6 @@ public class Manager{
         });
 
         Events.on(EventType.WorldLoadEvent.class, e -> {
-            units.clear();
-            effects.clear();
-
             if(state.isEditor()){
                 host = false;
                 return;
@@ -179,23 +173,23 @@ public class Manager{
 
             if(difficulty < 1) return;
 
-            var tile = e.unit.tileOn();
+            Tile tile = e.unit.tileOn();
             if(tile == null) return;
 
-            units = spawns.get(e.unit.type, Seq.with());
+            Seq<UnitType> units = spawns.get(e.unit.type, Seq.with());
             if(units.isEmpty()) return;
 
-            effects.clear();
 
+            Seq<StatusCache> effects = new Seq<>();
             float duration;
-            for(int i = 0; i < effectCache.size; i++){
-                duration = e.unit.getDuration(effectCache.get(i));
+            for(StatusEffect effect : effectCache){
+                duration = e.unit.getDuration(effect);
                 if(duration > 0f)
-                    effects.add(new StatusEntry(effectCache.get(i), duration));
+                    effects.add(new StatusCache(effect, duration));
             }
 
             units.each(type -> {
-                areas.clear();
+                Seq<Tile> areas = new Seq<>();
                 tile.circle((int) ((e.unit.hitSize + 16f) / tilesize), var -> {
                     if(var != null && (!var.solid() || type.flying) && (var.floor().isLiquid || !type.naval))
                         areas.add(var);
@@ -336,7 +330,7 @@ public class Manager{
 
                 if(state.rules.pvp) return;
 
-                damage = 0;
+                float damage = 0;
                 if(damageBuildings && weathers[0] && Mathf.chance(0.64d) && !shielded.get(t.array()))
                     damage += 0.0083f * scaledRand();
                 if(damageTurrets && validTurret(t.build) && (t.build.liquids.current() == null || t.build.liquids.currentAmount() <= req) && heat >= 0.2f)
@@ -416,7 +410,7 @@ public class Manager{
 
     static void reload(){
         spawns.clear();
-        time = 0;
+        float time;
 
         Log.infoTag("Extremity", "Running unit indexing task...");
         Time.mark();
@@ -440,15 +434,15 @@ public class Manager{
             }
 
             if(b instanceof UnitAssembler a){
-                units.clear();
+                Seq<UnitType> types = new Seq<>();
                 a.plans.each(p -> {
                     p.requirements.each(s -> {
                         if(s.item instanceof UnitType u)
-                            units.add(u);
+                            types.add(u);
                     });
 
-                    if(!units.isEmpty())
-                        spawns.put(p.unit, units.copy());
+                    if(!types.isEmpty())
+                        spawns.put(p.unit, types);
                 });
             }
         });
@@ -459,7 +453,6 @@ public class Manager{
         Log.infoTag("Extremity", "Fetching entries from other mods...");
         Time.mark();
 
-        Seq<UnitType> results = new Seq<>();
         mods.eachEnabled(m -> {
             if(m.meta.internalName.equals(internalName())) return;
 
@@ -476,7 +469,7 @@ public class Manager{
                     UnitType parent = getUnit(main[0]);
                     String[] secondary = main[1].split("&");
 
-                    results.clear();
+                    Seq<UnitType> results = new Seq<>();
                     for(String var : secondary){
                         UnitType spawn = getUnit(var);
                         if(spawn != null)
@@ -485,7 +478,7 @@ public class Manager{
                     }
 
                     if(parent != null && !results.isEmpty())
-                        spawns.put(parent, results.copy());
+                        spawns.put(parent, results);
                     else
                         Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
                 }
@@ -609,11 +602,11 @@ public class Manager{
         return main != null ? main.meta.internalName : "err";
     }
 
-    private static class StatusEntry{
+    private static class StatusCache{
         final StatusEffect effect;
         final float duration;
 
-        StatusEntry(StatusEffect effect, float duration){
+        StatusCache(StatusEffect effect, float duration){
             this.effect = effect;
             this.duration = duration;
         }

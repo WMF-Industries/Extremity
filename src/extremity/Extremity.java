@@ -72,7 +72,6 @@ public class Extremity extends Mod{
 
                 t.add(table);
             });
-            ui.menufrag.addButton("@extremity-unitdex-button", Icon.pencil, UnitdexEditor::show);
         });
 
         Events.on(EventType.ServerLoadEvent.class, e -> {

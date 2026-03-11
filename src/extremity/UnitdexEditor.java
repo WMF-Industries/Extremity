@@ -1,7 +1,7 @@
 package extremity;
 
 import arc.*;
-import arc.graphics.Color;
+import arc.graphics.*;
 import arc.scene.event.*;
 import arc.scene.style.*;
 import arc.scene.ui.*;
@@ -21,7 +21,18 @@ public class UnitdexEditor{
     public static BaseDialog unitdex = new BaseDialog("@extremity-unitdex"), dexedit = new BaseDialog("extremity-dexedit");
     public static Table buttonsRight = new Table(), buttonsLeft = new Table(), buttonsBottom = new Table(), editor = new Table();
     public static String save = "newdex";
-    public static int size = 60;
+
+    public static final float
+
+    size = 60f,
+    iconSize = size * 0.85f,
+    iconSizeSmall = size * 0.5f,
+    iconSizeTiny = size * 0.33f,
+    textWidth = 35f,
+    charWidth = 10f,
+    buttonWidth = 120f,
+    buttonWidthLong = buttonWidth + size,
+    labelWidth = 220f;
 
     public static Cell<ScrollPane> canvas;
 
@@ -40,6 +51,8 @@ public class UnitdexEditor{
                 )
             );
         });
+
+        ui.menufrag.addButton("@extremity-unitdex-button", Icon.pencil, UnitdexEditor::show);
     }
 
     public static void show(){
@@ -63,45 +76,45 @@ public class UnitdexEditor{
 
                 editor.table(Tex.button, s -> {
                     s.table(Tex.underline, e-> {
-                        Image img = new Image(Icon.trash);
+                        ImageButton img = new ImageButton(Icon.trash, Styles.flati);
+                        img.resizeImage(iconSizeTiny);
                         img.clicked(() ->{
                             Manager.spawns.remove(unit);
                             rebuild();
                         });
 
-                        e.add(img).size(size / 3f).touchable(Touchable.enabled).scaling(Scaling.bounded).padLeft(2f);
+                        e.add(img).size(iconSizeSmall).touchable(Touchable.enabled).scaling(Scaling.bounded).padBottom(2f);
                     }).growX().row();
-                    s.table( u -> {
-                        Label txt = new Label(Strings.format("@ @", Iconc.pencil, unit.localizedName));
-                        txt.setWrap(true);
-                        txt.fillParent = true;
-                        txt.clicked(() -> editEntry(unit));
+                    s.table(u -> {
+                        String text = Strings.format("@ @", Iconc.pencil, unit.localizedName);
 
-                        Image img = new Image(unit.uiIcon);
+                        ImageButton img = new ImageButton(unit.uiIcon, Styles.flati);
+                        img.resizeImage(iconSize);
+                        img.left();
+                        img.labelWrap(" " + text);
                         img.clicked(() -> editEntry(unit));
 
-                        u.add(img).scaling(Scaling.bounded).size(size * 0.85f).touchable(Touchable.enabled);
-                        u.add(txt).padLeft(0f).touchable(Touchable.enabled).grow();
+                        u.add(img).scaling(Scaling.bounded).size(iconSize + scaledSize(text), iconSize).padTop(2f);
                     }).growX().row();
                     s.table(Tex.underline, e -> {
                         int ct = 0;
                         for(UnitType child : vars){
-                            Image img = new Image(child.uiIcon);
+                            ImageButton img = new ImageButton(child.uiIcon, Styles.flati);
                             img.clicked(() -> editValues(unit, child));
 
-                            e.add(img).scaling(Scaling.bounded).size(size * 0.85f).touchable(Touchable.enabled).padRight(0f).left();
+                            e.add(img).scaling(Scaling.bounded).size(iconSize).padRight(0f).left();
                             if(++ct >= 5){
                                 e.row();
                                 ct = 0;
                             }
                         }
 
-                        Image add = new Image(Icon.add);
+                        ImageButton add = new ImageButton(Icon.add, Styles.flati);
                         add.clicked(() -> editValues(unit, null));
-                        e.add(add).scaling(Scaling.bounded).size(size * 0.85f).touchable(Touchable.enabled).padRight(0f).left();
+                        e.add(add).scaling(Scaling.bounded).size(iconSize).padRight(0f).left();
                     }).growX().row();
                     s.row();
-                }).pad(1.5f).growX().width(canvas.maxWidth());
+                }).pad(1.5f).grow().width(canvas.maxWidth());
 
                 if(++count >= Core.settings.getInt("extremity-rows", 1)){
                     editor.row();
@@ -111,38 +124,26 @@ public class UnitdexEditor{
         }else editor.table(tb -> tb.label(() -> "@empty").growX().center().style(Styles.outlineLabel).pad(20f)).width(canvas.maxWidth()).row();
 
         if(hasSpace()){
-            editor.table(Tex.button, s -> {
-                s.table(u -> {
-                    Label txt = new Label(Strings.format("@ @", Iconc.add, Core.bundle.get("extremity-new-entry")));
-                    txt.setWrap(true);
-                    txt.fillParent = true;
-                    txt.clicked(UnitdexEditor::addEntry);
-
-                    Image img = new Image(Icon.units);
-                    img.clicked(UnitdexEditor::addEntry);
-
-                    u.add(txt).padLeft(0f).touchable(Touchable.enabled).grow();
-                    u.add(img).scaling(Scaling.bounded).size(size * 0.85f).touchable(Touchable.enabled).padRight(0f).left();
-                }).growX().row();
-            }).pad(1.5f).growX().width(canvas.maxWidth());
+            String text = Core.bundle.get("extremity-new-entry");
+            editor.button(text, Icon.units, UnitdexEditor::addEntry).minWidth(scaledSize(text)).grow();
         }
 
-        buttonsRight.button("@extremity-reset", () -> {
+        buttonsRight.button("@extremity-reset", Icon.rotate, () -> {
             Manager.reload();
             rebuild();
-        }).width(120f).row();
-        buttonsRight.button("@extremity-clear", () ->
+        }).width(buttonWidth).row();
+        buttonsRight.button("@extremity-clear", Icon.trash, () ->
             ui.showConfirm("@confirm", "@extremity-confirm-clear", () -> {
                 Manager.spawns.clear();
                 rebuild();
             })
-        ).width(120f).row();
+        ).width(buttonWidth).row();
 
-        buttonsLeft.button("@extremity-save", () -> {
+        buttonsLeft.button("@extremity-save", Icon.save, () -> {
             Table table = new Table();
             save = "newdex";
 
-            table.add(Strings.format("@: @", Core.bundle.get("extremity-current-name"), save));
+            table.add(Core.bundle.format("extremity-current-name", save));
 
             dexedit.reset();
             dexedit.fill(t ->
@@ -151,9 +152,9 @@ public class UnitdexEditor{
                     Core.settings.putJson("extremity-customdexes", String.class, customdexes);
                     Core.settings.put("extremity-customdex-" + save, Manager.packDex());
 
-                    ui.showInfoFade(Strings.format("@ @", Core.bundle.get("extremity-saved"), save));
+                    ui.showInfoFade(Core.bundle.format("extremity-saved", save));
                     dexedit.hide();
-                }).width(180f)
+                }).width(buttonWidthLong)
             );
 
             dexedit.row();
@@ -164,7 +165,7 @@ public class UnitdexEditor{
                     save = name.isEmpty() ? "newdex" : name;
 
                     table.reset();
-                    table.add(Strings.format("@: @", Core.bundle.get("extremity-current-name"), save)).row();
+                    table.add(Core.bundle.format("extremity-current-name", save)).row();
 
                     if(customdexes.contains(save))
                         table.add("@extremity-overwrite").color(Color.scarlet).row();
@@ -172,15 +173,15 @@ public class UnitdexEditor{
                 t.add(table).row();
             });
 
-            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(buttonWidthLong));
             dexedit.show();
-        }).width(180f).row();
-        buttonsLeft.button("@extremity-load", () -> {
+        }).width(buttonWidthLong).row();
+        buttonsLeft.button("@extremity-load", Icon.list, () -> {
             dexedit.reset();
 
             dexedit.fill(t -> {
                 if(customdexes.isEmpty()){
-                    t.center().add("@extremity-no-saves").width(220f);
+                    t.center().add("@extremity-no-saves").width(labelWidth);
                 }else{
                     for(var string : customdexes){
                         if(string.isEmpty()) continue;
@@ -191,22 +192,22 @@ public class UnitdexEditor{
 
                             ui.showInfoFade(Strings.format("@ @", Core.bundle.get("extremity-loaded"), string));
                             dexedit.hide();
-                        }).width(50f + (10f * string.length()));
+                        }).width(scaledSize(string));
                     }
                 }
             });
 
-            dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(220f));
-            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
+            dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(labelWidth));
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(buttonWidthLong));
 
             dexedit.show();
-        }).width(180f).row();
-        buttonsLeft.button("@extremity-remove", () -> {
+        }).width(buttonWidthLong).row();
+        buttonsLeft.button("@extremity-remove", Icon.cancel, () -> {
             dexedit.reset();
 
             dexedit.fill(t -> {
                 if(customdexes.isEmpty())
-                    t.center().add("@extremity-no-saves").width(220f);
+                    t.center().add("@extremity-no-saves").width(labelWidth);
                 else{
                     for(var string : customdexes){
                         if(string.isEmpty()) continue;
@@ -219,28 +220,28 @@ public class UnitdexEditor{
 
                             ui.showInfoFade("@extremity-removed");
                             dexedit.hide();
-                        }).width(50f + (10f * string.length()));
+                        }).width(scaledSize(string));
                     }
                 }
             });
 
-            dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(220f));
-            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(180f));
+            dexedit.fill(t -> t.center().top().marginTop(40f).add("@extremity-select").width(labelWidth));
+            dexedit.fill(t -> t.center().bottom().button("@back", Icon.left, () -> dexedit.hide()).width(buttonWidthLong));
 
             dexedit.show();
-        }).width(180f).row();
+        }).width(buttonWidthLong).row();
 
-        buttonsBottom.button("@extremity-export", () -> {
+        buttonsBottom.button("@extremity-export", Icon.upload, () -> {
             Core.app.setClipboardText(Manager.packDex());
 
             ui.showInfoFade("@extremity-exported");
-        }).width(180f).row();
-        buttonsBottom.button("@extremity-import", () -> {
+        }).width(buttonWidthLong).row();
+        buttonsBottom.button("@extremity-import", Icon.download, () -> {
             Manager.loadRaw(Core.app.getClipboardText(), "clipboard");
             rebuild();
 
             ui.showInfoFade("@extremity-imported");
-        }).width(180f).row();
+        }).width(buttonWidthLong).row();
     }
 
     static boolean hasSpace(){
@@ -308,6 +309,9 @@ public class UnitdexEditor{
         dialog.show();
     }
 
+    static float scaledSize(String text){
+        return textWidth + (charWidth * text.length());
+    }
 
     static void editValues(UnitType entry, UnitType value){
         BaseDialog dialog = new BaseDialog("");
