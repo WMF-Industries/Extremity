@@ -3,7 +3,7 @@
 Experience Mindustry, in a rather evil way
 
 ### Adding Unitdexes to your mod
-Extremity, by default, builds it's unitdexes automatically on game start.
+Extremity, by default, builds its unitdexes automatically on game start.
 
 However, if your mod doesn't use the default methods of upgrading units, Extremity can fail to generate the entries.  
 In such case:
@@ -19,7 +19,7 @@ Paste the following code into your mod's main class and replace <unitdex string>
 ```java
 var self = Vars.mods.getMod(getClass());
 if(self != null && self.meta != null)
-    Core.settings.put("extremity-unitdex-" + self.meta.internalName, "<unitdex string>")
+    Core.settings.put("extremity-unitdex-" + self.meta.internalName, "<unitdex string>");
 ```
 
 #### Kotlin
