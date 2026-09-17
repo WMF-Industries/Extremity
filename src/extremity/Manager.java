@@ -209,7 +209,8 @@ public class Manager{
                 if(areas.isEmpty()) // no spawn locations, bail!
                     return;
 
-                for(int i = 0; i <= unitRand(); i++){
+                int random = unitRand();
+                for(int i = 0; i <= random; i++){
                     Tile tmp = areas.random();
 
                     Unit u = type.spawn(e.unit.team, tmp.getX() + Mathf.random(-0.2f, 0.2f), tmp.getY() + Mathf.random(-0.2f, 0.2f));
