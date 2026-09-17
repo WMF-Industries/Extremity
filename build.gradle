@@ -3,7 +3,7 @@ apply plugin: "java"
 sourceSets.main.java.srcDirs = ["src"]
 
 ext{
-    mindustryVersion = "latest"
+    mindustryVersion = "v160.4"
     isWindows = System.getProperty("os.name").toLowerCase().contains("windows")
     sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
 }

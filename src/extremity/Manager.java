@@ -5,6 +5,9 @@ import arc.math.*;
 import arc.math.geom.*;
 import arc.struct.*;
 import arc.util.*;
+import mindustry.ai.RtsAI;
+import mindustry.ai.UnitCommand;
+import mindustry.ai.types.CommandAI;
 import mindustry.content.*;
 import mindustry.ctype.*;
 import mindustry.entities.*;
@@ -31,7 +34,7 @@ import static mindustry.mod.Mods.*;
 public class Manager{
     public static final int fixedRate = 5; // the amount of ticks between each fixedUpdate
 
-    static boolean host = false, lockSettings = false;
+    static boolean host = false, lockSettings = false, loadedCustom = false;
     static LoadedMod main;
 
     final static OrderedMap<UnitType, Seq<UnitType>> spawns = new OrderedMap<>();
@@ -40,6 +43,7 @@ public class Manager{
 
     final static Interval intervals = new Interval(2);
     final static Seq<Player> players = new Seq<>(false);
+    final static Seq<UnitType> dummy = new Seq<>(0);
 
     static Bits shielded;
     static boolean[] weathers = new boolean[3];
@@ -77,15 +81,13 @@ public class Manager{
             netClient.addBinaryPacketHandler("extremity-config", SettingCache::apply);
         });
 
-        Events.on(EventType.ContentInitEvent.class, e -> {
-            // wait a tick for mods that may be doing some weird setup
-            Core.app.post(() -> {
-                // startup task that creates a map of unit spawns, *should* be compatible with most mods
+        Events.on(EventType.ContentInitEvent.class, e -> reload());
+
+        Events.on(EventType.RulesLoadEvent.class, e -> {
+            if(!loadedCustom)
                 reload();
 
-                effectCache = content.statusEffects().toArray(StatusEffect.class);
-                Log.infoTag("Extremity","Pain has been fully loaded...");
-            });
+            effectCache = content.statusEffects().toArray(StatusEffect.class);
         });
 
         Events.on(EventType.BlockDestroyEvent.class, e -> {
@@ -168,7 +170,8 @@ public class Manager{
         Events.on(EventType.UnitDestroyEvent.class, e -> {
             if(!host || hasPlayers(e.unit.team)) return;
 
-            if(guardianShielding && e.unit.hasEffect(StatusEffects.boss))
+            boolean boss = guardianShielding && e.unit.hasEffect(StatusEffects.boss);
+            if(boss)
                 Units.nearby(e.unit.team, e.unit.x, e.unit.y, e.unit.range(), u -> u.apply(StatusEffects.shielded, Float.MAX_VALUE));
 
             if(difficulty < 1) return;
@@ -176,17 +179,25 @@ public class Manager{
             Tile tile = e.unit.tileOn();
             if(tile == null) return;
 
-            Seq<UnitType> units = spawns.get(e.unit.type, Seq.with());
+            Seq<UnitType> units = spawns.get(e.unit.type, dummy);
             if(units.isEmpty()) return;
 
-
-            Seq<StatusCache> effects = new Seq<>();
             float duration;
+            Seq<StatusCache> effects = new Seq<>();
+
             for(StatusEffect effect : effectCache){
                 duration = e.unit.getDuration(effect);
                 if(duration > 0f)
                     effects.add(new StatusCache(effect, duration));
             }
+
+            CommandAI prev = e.unit.isCommandable() ? e.unit.command() : null;
+            boolean stopAtTarget = prev != null && (boolean) Reflect.get(CommandAI.class, prev, "stopAtTarget"),
+            stopWhenInRange = prev != null && (boolean) Reflect.get(CommandAI.class, prev, "stopWhenInRange");
+            Vec2 lastTargetPos = prev != null ? Reflect.get(CommandAI.class, prev, "lastTargetPos") : null;
+
+            if(prev != null && prev.group != null)
+                prev.group.units.remove(e.unit);
 
             units.each(type -> {
                 Seq<Tile> areas = new Seq<>();
@@ -203,7 +214,34 @@ public class Manager{
 
                     Unit u = type.spawn(e.unit.team, tmp.getX() + Mathf.random(-0.2f, 0.2f), tmp.getY() + Mathf.random(-0.2f, 0.2f));
                     u.rotation(e.unit.rotation);
+
+                    if(boss) u.apply(StatusEffects.shielded, Float.MAX_VALUE);
                     effects.each(entry -> u.apply(entry.effect, entry.duration));
+
+                    if(prev != null && u.isCommandable()){
+                        CommandAI ai = u.command();
+
+                        ai.group = prev.group;
+                        ai.groupIndex = prev.groupIndex;
+                        if(ai.group != null)
+                            ai.group.units.add(u);
+
+                        ai.commandQueue = prev.commandQueue;
+                        ai.command = prev.command;
+
+                        ai.stances = prev.stances;
+
+                        ai.attackTarget = prev.attackTarget;
+                        ai.targetBuild = prev.targetBuild;
+                        ai.readAttackTarget = prev.readAttackTarget;
+                        ai.targetPos = prev.targetPos;
+
+                        try{
+                            Reflect.set(CommandAI.class, ai, "stopAtTarget", stopAtTarget);
+                            Reflect.set(CommandAI.class, ai, "stopWhenInRange", stopWhenInRange);
+                            Reflect.set(CommandAI.class, ai, "lastTargetPos", lastTargetPos);
+                        }catch(Exception ignored){}
+                    }
                 }
             });
         });
@@ -486,6 +524,8 @@ public class Manager{
                 Log.infoTag("Extremity", Strings.format("Mod @ does not have any custom unitdex entries", m.meta.displayName));
         });
 
+        loadedCustom = false;
+
         Log.infoTag("Extremity", Strings.format("Created @ entries in @ms!", spawns.size, Math.round(time + Time.elapsed())));
     }
 
@@ -563,6 +603,7 @@ public class Manager{
                     Log.infoTag("Extremity", Strings.format("Found no units matching the unitdex entry data (@)", main[1]));
             }
 
+            loadedCustom = true;
             return;
         }
 
