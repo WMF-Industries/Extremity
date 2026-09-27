@@ -80,6 +80,8 @@ public class UnitdexEditor{
                         img.resizeImage(iconSizeTiny);
                         img.clicked(() ->{
                             Manager.spawns.remove(unit);
+                            Manager.loadedCustom = true;
+
                             rebuild();
                         });
 
@@ -135,6 +137,8 @@ public class UnitdexEditor{
         buttonsRight.button("@extremity-clear", Icon.trash, () ->
             ui.showConfirm("@confirm", "@extremity-confirm-clear", () -> {
                 Manager.spawns.clear();
+                Manager.loadedCustom = true;
+
                 rebuild();
             })
         ).width(buttonWidth).row();
@@ -265,6 +269,7 @@ public class UnitdexEditor{
 
                 t.button(new TextureRegionDrawable(item.uiIcon), Styles.flati, iconLarge, () -> {
                     Manager.spawns.put(item, new Seq<>());
+                    Manager.loadedCustom = true;
 
                     rebuild();
                     dialog.hide();
@@ -296,10 +301,11 @@ public class UnitdexEditor{
 
                     Manager.spawns.remove(entry);
                     Manager.spawns.put(item, res);
+                    Manager.loadedCustom = true;
 
                     rebuild();
                     dialog.hide();
-                }).size(iconXLarge).scaling(Scaling.bounded).tooltip(tip.toString() );
+                }).size(iconXLarge).scaling(Scaling.bounded).tooltip(tip.toString());
 
                 if(++c % 6 == 0) t.row();
             }
@@ -332,6 +338,7 @@ public class UnitdexEditor{
                     res.remove(value);
 
                     Manager.spawns.put(entry, res);
+                    Manager.loadedCustom = true;
 
                     rebuild();
                     dialog.hide();
@@ -342,6 +349,7 @@ public class UnitdexEditor{
 
             t.button(Icon.cancel, Styles.flati, iconLarge, () -> {
                 Manager.spawns.get(entry).remove(value);
+                Manager.loadedCustom = true;
 
                 rebuild();
                 dialog.hide();
